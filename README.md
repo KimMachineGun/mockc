@@ -38,7 +38,6 @@ import (
 func MockcExParser() {
 	mockc.Implements(ex.Parser(nil))
 }
-
 ```
 ### 2. Run `mockc`
 ```sh
@@ -61,30 +60,34 @@ type MockcExParser struct {
 			// basics
 			Called    bool
 			CallCount int
-			// params
+			// last params
 			Params struct {
 				b []byte
 			}
-			// results
+			// last results
 			Results struct {
 				result []byte
 				err    error
 			}
+			// if Body is not nil, it is called in the middle of the method.
+			Body func([]byte) ([]byte, error)
 		}
 		// method: Parse
 		Parse struct {
 			// basics
 			Called    bool
 			CallCount int
-			// params
+			// last params
 			Params struct {
 				s string
 			}
-			// results
+			// last results
 			Results struct {
 				result string
 				err    error
 			}
+			// if Body is not nil, it is called in the middle of the method.
+			Body func(string) (string, error)
 		}
 	}
 }
@@ -95,6 +98,10 @@ func (recv *MockcExParser) ParseBytes(b []byte) ([]byte, error) {
 	recv.mockcs.ParseBytes.CallCount++
 	// params
 	recv.mockcs.ParseBytes.Params.b = b
+	// body
+	if recv.mockcs.ParseBytes.Body != nil {
+		recv.mockcs.ParseBytes.Results.result, recv.mockcs.ParseBytes.Results.err = recv.mockcs.ParseBytes.Body(b)
+	}
 	// results
 	return recv.mockcs.ParseBytes.Results.result, recv.mockcs.ParseBytes.Results.err
 }
@@ -105,6 +112,10 @@ func (recv *MockcExParser) Parse(s string) (string, error) {
 	recv.mockcs.Parse.CallCount++
 	// params
 	recv.mockcs.Parse.Params.s = s
+	// body
+	if recv.mockcs.Parse.Body != nil {
+		recv.mockcs.Parse.Results.result, recv.mockcs.Parse.Results.err = recv.mockcs.Parse.Body(s)
+	}
 	// results
 	return recv.mockcs.Parse.Results.result, recv.mockcs.Parse.Results.err
 }

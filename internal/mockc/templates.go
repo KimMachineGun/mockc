@@ -16,7 +16,7 @@ const (
 			Called bool
 			CallCount int
 		{{- if len .Params }}
-			// params
+			// last params
 			Params struct {
 			{{- range .Params }}
 				{{ .String }}
@@ -24,13 +24,15 @@ const (
 			}
 		{{- end }}
 		{{- if len .Results}}
-			// results
+			// last results
 			Results struct {
 			{{- range .Results }}
 				{{ .String }}
 			{{- end }}
 			}
 		{{- end }}
+			// if Body is not nil, it is called in the middle of the method.
+			Body func({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ParamType }}{{ end }}) {{ if len .Results | lt 1 }}({{ end }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}{{ $val.ResultType }}{{ end }}{{ if len .Results | lt 1 }}){{ end }}
 		}
 {{- end }}
 	}
@@ -47,8 +49,12 @@ func (recv *{{ $.Name }}) {{ $method.Signature }} {
 	recv.mockcs.{{ $method.Name }}.Params.{{ $param.Name }} = {{ $param.Name }}
 	{{- end }}
 	{{- if len .Results}}
+	// body
+	if recv.mockcs.{{ $method.Name }}.Body != nil {
+		{{ if len .Results }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.Name }}{{ end }} = {{ end }}recv.mockcs.{{ $method.Name }}.Body({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ArgString }}{{ end }})
+	}
 	// results
-	return {{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.N }}{{ end }} 
+	return {{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.Name }}{{ end }}
 	{{- end }}
 }
 {{ end }}`
@@ -78,7 +84,7 @@ func (m methodInfo) Signature() string {
 
 	results := make([]string, 0, len(m.Results))
 	for _, r := range m.Results {
-		results = append(results, r.ResultString())
+		results = append(results, r.ResultType())
 	}
 	result := strings.Join(results, ", ")
 	if len(m.Results) > 1 {
@@ -94,12 +100,25 @@ type paramInfo struct {
 }
 
 func (p *paramInfo) ParamString() string {
+	return fmt.Sprintf("%v %v", p.Name, p.ParamType())
+}
+
+func (p *paramInfo) ParamType() string {
+	typeString := p.TypeString
+	if p.IsVariadic {
+		typeString = fmt.Sprintf("...%v", typeString[2:])
+	}
+
+	return fmt.Sprintf("%v", typeString)
+}
+
+func (p *paramInfo) ArgString() string {
 	var variadic string
 	if p.IsVariadic {
 		variadic = "..."
 	}
 
-	return fmt.Sprintf("%v %v%v", p.Name, variadic, p.TypeString)
+	return fmt.Sprintf("%v%v", p.Name, variadic)
 }
 
 func (p *paramInfo) String() string {
@@ -107,13 +126,17 @@ func (p *paramInfo) String() string {
 }
 
 type resultInfo struct {
-	N, T string
+	Name, TypeString string
 }
 
 func (r *resultInfo) ResultString() string {
-	return fmt.Sprintf("%v", r.T)
+	return fmt.Sprintf("%v %v", r.Name, r.ResultType())
+}
+
+func (r *resultInfo) ResultType() string {
+	return r.TypeString
 }
 
 func (r *resultInfo) String() string {
-	return fmt.Sprintf("%v %v", r.N, r.T)
+	return fmt.Sprintf("%v %v", r.Name, r.TypeString)
 }

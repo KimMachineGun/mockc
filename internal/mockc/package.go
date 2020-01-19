@@ -272,8 +272,8 @@ func (p *Package) GenerateResult() error {
 				}
 
 				methodInfo.Results = append(methodInfo.Results, resultInfo{
-					N: n,
-					T: p.typeString(result.Type()),
+					Name:       n,
+					TypeString: p.typeString(result.Type()),
 				})
 			}
 
