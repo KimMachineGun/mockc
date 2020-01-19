@@ -27,7 +27,7 @@ type Parser interface {
 ```go
 //+build mockc
 
-package mysql
+package main
 
 import (
 	"github.com/KimMachineGun/mockc"
@@ -52,7 +52,7 @@ mockc [<packages-pattern>]
 //go:generate mockc
 //+build !mockc
 
-package mysql
+package main
 
 type MockcExParser struct {
 	mockcs struct {
