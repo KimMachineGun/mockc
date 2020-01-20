@@ -15,7 +15,26 @@ const (
 			// basics
 			Called bool
 			CallCount int
-		{{- if len .Params }}
+		{{- if or (len .Params) (len .Results) }}
+			// call history
+			History []struct{
+			{{- if len .Params }}
+				Params struct {
+				{{- range .Params }}
+					{{ .String }}
+				{{- end }}
+				}
+			{{- end }}
+			{{- if len .Results}}
+				Results struct {
+				{{- range .Results }}
+					{{ .String }}
+				{{- end }}
+				}
+			{{- end }}
+			}
+		{{- end }}
+		{{- if .Params }}
 			// last params
 			Params struct {
 			{{- range .Params }}
@@ -52,6 +71,32 @@ func (recv *{{ $.Name }}) {{ $method.Signature }} {
 	if recv.mockcs.{{ $method.Name }}.Body != nil {
 		{{ if len .Results }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.Name }}{{ end }} = {{ end }}recv.mockcs.{{ $method.Name }}.Body({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ArgString }}{{ end }})
 	}
+{{- if or (len .Params) (len .Results) }}
+	// call history
+	recv.mockcs.{{ $method.Name }}.History = append(recv.mockcs.{{ $method.Name }}.History, struct{
+	{{- if len .Params }}
+		Params struct {
+		{{- range .Params }}
+			{{ .String }}
+		{{- end }}
+		}
+	{{- end }}
+	{{- if len .Results}}
+		Results struct {
+		{{- range .Results }}
+			{{ .String }}
+		{{- end }}
+		}
+	{{- end }}
+	}{
+	{{- if len .Params }}
+		Params: recv.mockcs.{{ $method.Name }}.Params,
+	{{- end }}
+	{{- if len .Results}}
+		Results: recv.mockcs.{{ $method.Name }}.Results,
+	{{- end }}
+	})
+{{- end }}
 {{- if len .Results}}
 	// results
 	return {{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.Name }}{{ end }}

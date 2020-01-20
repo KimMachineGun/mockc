@@ -55,11 +55,48 @@ package ex
 
 type MockcCache struct {
 	mockcs struct {
+		// method: Get
+		Get struct {
+			// basics
+			Called    bool
+			CallCount int
+			// call history
+			History []struct {
+				Params struct {
+					key string
+				}
+				Results struct {
+					val interface{}
+					err error
+				}
+			}
+			// last params
+			Params struct {
+				key string
+			}
+			// last results
+			Results struct {
+				val interface{}
+				err error
+			}
+			// if Body is not nil, it is called in the middle of the method.
+			Body func(string) (interface{}, error)
+		}
 		// method: Set
 		Set struct {
 			// basics
 			Called    bool
 			CallCount int
+			// call history
+			History []struct {
+				Params struct {
+					key string
+					val interface{}
+				}
+				Results struct {
+					err error
+				}
+			}
 			// last params
 			Params struct {
 				key string
@@ -77,6 +114,15 @@ type MockcCache struct {
 			// basics
 			Called    bool
 			CallCount int
+			// call history
+			History []struct {
+				Params struct {
+					key string
+				}
+				Results struct {
+					err error
+				}
+			}
 			// last params
 			Params struct {
 				key string
@@ -88,24 +134,34 @@ type MockcCache struct {
 			// if Body is not nil, it is called in the middle of the method.
 			Body func(string) error
 		}
-		// method: Get
-		Get struct {
-			// basics
-			Called    bool
-			CallCount int
-			// last params
-			Params struct {
-				key string
-			}
-			// last results
-			Results struct {
-				val interface{}
-				err error
-			}
-			// if Body is not nil, it is called in the middle of the method.
-			Body func(string) (interface{}, error)
-		}
 	}
+}
+
+func (recv *MockcCache) Get(key string) (interface{}, error) {
+	// basics
+	recv.mockcs.Get.Called = true
+	recv.mockcs.Get.CallCount++
+	// params
+	recv.mockcs.Get.Params.key = key
+	// body
+	if recv.mockcs.Get.Body != nil {
+		recv.mockcs.Get.Results.val, recv.mockcs.Get.Results.err = recv.mockcs.Get.Body(key)
+	}
+	// call history
+	recv.mockcs.Get.History = append(recv.mockcs.Get.History, struct {
+		Params struct {
+			key string
+		}
+		Results struct {
+			val interface{}
+			err error
+		}
+	}{
+		Params:  recv.mockcs.Get.Params,
+		Results: recv.mockcs.Get.Results,
+	})
+	// results
+	return recv.mockcs.Get.Results.val, recv.mockcs.Get.Results.err
 }
 
 func (recv *MockcCache) Set(key string, val interface{}) error {
@@ -119,6 +175,19 @@ func (recv *MockcCache) Set(key string, val interface{}) error {
 	if recv.mockcs.Set.Body != nil {
 		recv.mockcs.Set.Results.err = recv.mockcs.Set.Body(key, val)
 	}
+	// call history
+	recv.mockcs.Set.History = append(recv.mockcs.Set.History, struct {
+		Params struct {
+			key string
+			val interface{}
+		}
+		Results struct {
+			err error
+		}
+	}{
+		Params:  recv.mockcs.Set.Params,
+		Results: recv.mockcs.Set.Results,
+	})
 	// results
 	return recv.mockcs.Set.Results.err
 }
@@ -133,22 +202,20 @@ func (recv *MockcCache) Del(key string) error {
 	if recv.mockcs.Del.Body != nil {
 		recv.mockcs.Del.Results.err = recv.mockcs.Del.Body(key)
 	}
+	// call history
+	recv.mockcs.Del.History = append(recv.mockcs.Del.History, struct {
+		Params struct {
+			key string
+		}
+		Results struct {
+			err error
+		}
+	}{
+		Params:  recv.mockcs.Del.Params,
+		Results: recv.mockcs.Del.Results,
+	})
 	// results
 	return recv.mockcs.Del.Results.err
-}
-
-func (recv *MockcCache) Get(key string) (interface{}, error) {
-	// basics
-	recv.mockcs.Get.Called = true
-	recv.mockcs.Get.CallCount++
-	// params
-	recv.mockcs.Get.Params.key = key
-	// body
-	if recv.mockcs.Get.Body != nil {
-		recv.mockcs.Get.Results.val, recv.mockcs.Get.Results.err = recv.mockcs.Get.Body(key)
-	}
-	// results
-	return recv.mockcs.Get.Results.val, recv.mockcs.Get.Results.err
 }
 ```
 ### 4. Feel free to use the generated mock
@@ -159,6 +226,7 @@ Please add `//+build !mockc` build tag to the file using the generated mocks.
 package ex
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -172,26 +240,92 @@ func HasKey(c Cache, key string) (bool, error) {
 }
 
 func TestHasKey(t *testing.T) {
-	key := "key str"
-
 	m := &MockcCache{}
-	m.mockcs.Get.Results.val = true
+	m.mockcs.Get.Results.val = struct{}{}
 
+	key := "key"
 	expected := true
 	actual, err := HasKey(m, key)
 
-	if expected != actual {
-		t.Errorf("HasKey results: expected(%v) != actual(%v)", expected, actual)
+	if actual != expected {
+		t.Errorf("result: expected(%v) != actual(%v)", expected, actual)
 	}
 	if err != nil {
-		t.Errorf("err is not nil: %v", err)
-	}
-
-	if m.mockcs.Get.CallCount != 1 {
-		t.Errorf("Cache.Get call count is not 1: %v", m.mockcs.Get.CallCount)
+		t.Errorf("err: %v", err)
 	}
 	if m.mockcs.Get.Params.key != key {
-		t.Errorf("Cache.Get.Params: expected(%v) != actual(%v)", key, m.mockcs.Get.Params.key)
+		t.Errorf("expected(%v) != actual(%v)", key, m.mockcs.Get.Params.key)
+	}
+}
+
+func TestHasKey_WithMethodBodyInjection(t *testing.T) {
+	m := &MockcCache{}
+	m.mockcs.Get.Body = func(key string) (interface{}, error) {
+		if key == "key" {
+			return nil, errors.New("err")
+		}
+		return nil, nil
+	}
+
+	key := "key"
+	expected := false
+	actual, err := HasKey(m, key)
+
+	if expected != actual {
+		t.Errorf("result: expected(%v) != actual(%v)", expected, actual)
+	}
+	if err == nil {
+		t.Errorf("err: %v", err)
+	}
+	if key != m.mockcs.Get.Params.key {
+		t.Errorf("param key: expected(%v) != actual(%v)", key, m.mockcs.Get.Params.key)
+	}
+}
+
+func TestHasKey_WithHistory(t *testing.T) {
+	m := &MockcCache{}
+
+	table := []struct {
+		key string
+		val interface{}
+
+		expected bool
+		err      error
+	}{
+		{
+			key: "key1",
+			val: struct{}{},
+
+			expected: true,
+			err:      nil,
+		},
+		{
+
+			key: "key2",
+			val: nil,
+
+			expected: false,
+			err:      errors.New("err"),
+		},
+	}
+
+	for _, t := range table {
+		m.mockcs.Get.Results.val = t.val
+		m.mockcs.Get.Results.err = t.err
+
+		HasKey(m, t.key)
+	}
+
+	for idx, h := range m.mockcs.Get.History {
+		if expected, actual := table[idx].expected, h.Results.val != nil; expected != actual {
+			t.Errorf("table[%v] result : expected(%v) != actual(%v)", idx, expected, actual)
+		}
+		if expected, actual := table[idx].err, h.Results.err; expected != actual {
+			t.Errorf("table[%v] err : expected(%v) != actual(%v)", idx, expected, actual)
+		}
+		if expected, actual := table[idx].key, h.Params.key; expected != actual {
+			t.Errorf("table[%v] param key: expected(%v) != actual(%v)", idx, expected, actual)
+		}
 	}
 }
 ```
