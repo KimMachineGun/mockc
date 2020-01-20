@@ -9,7 +9,7 @@ import (
 const (
 	mockTmplString = `type {{ .Name }} struct {
 	mockcs struct {
-{{- range .Methods }}
+	{{- range .Methods }}
 		// method: {{ .Name }}
 		{{ .Name }} struct {
 			// basics
@@ -34,7 +34,7 @@ const (
 			// if Body is not nil, it is called in the middle of the method.
 			Body func({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ParamType }}{{ end }}) {{ if len .Results | lt 1 }}({{ end }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}{{ $val.ResultType }}{{ end }}{{ if len .Results | lt 1 }}){{ end }}
 		}
-{{- end }}
+	{{- end }}
 	}
 }
 {{ range $method := .Methods }}
@@ -42,20 +42,20 @@ func (recv *{{ $.Name }}) {{ $method.Signature }} {
 	// basics
 	recv.mockcs.{{ $method.Name }}.Called = true
 	recv.mockcs.{{ $method.Name }}.CallCount++
-	{{- if len .Params }}
+{{- if len .Params }}
 	// params
-	{{- end }}
 	{{- range $param := $method.Params }}
 	recv.mockcs.{{ $method.Name }}.Params.{{ $param.Name }} = {{ $param.Name }}
 	{{- end }}
-	{{- if len .Results}}
+{{- end }}
 	// body
 	if recv.mockcs.{{ $method.Name }}.Body != nil {
 		{{ if len .Results }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.Name }}{{ end }} = {{ end }}recv.mockcs.{{ $method.Name }}.Body({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ArgString }}{{ end }})
 	}
+{{- if len .Results}}
 	// results
 	return {{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.mockcs.{{ $method.Name }}.Results.{{ $val.Name }}{{ end }}
-	{{- end }}
+{{- end }}
 }
 {{ end }}`
 )
