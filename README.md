@@ -1,11 +1,14 @@
 # Mockc: Complie-time mock generator for Go
-Mockc is a compile-time mock generator for Go. It simply parses your mock generators and creates mocks. Mockc is completely type safe. You can use it just by writing a mock generator with `mockc.Implements` and `mockc.SetMode`.
+Mockc is a compile-time mock generator for Go. It simply parses your mock generators and creates mocks. Mockc is completely type safe. You can use it just by writing a mock generator with `mockc.Implements()` and `mockc.SetMode()`.
 
 > This is beta release. This might have some bugs. Please submit your [issue](https://github.com/KimMachineGun/mockc/issues/new).
 
 ## Features
-- [x] Mock creation
-- [ ] Mock mode settings
+- [x] Mock generation with `mockc.Implements()`
+  - [x] Method params and results
+  - [x] Method body injection
+  - [x] Method call history
+- [ ] Mock mode setting with `mockc.SetMode()`
 
 ## Installation
 ```
