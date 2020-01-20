@@ -63,6 +63,7 @@ func (m *Mockc) loadPackages(ctx context.Context, wd string, patterns []string) 
 		Context:    ctx,
 		Mode:       packages.LoadAllSyntax,
 		Dir:        wd,
+		Tests:      true,
 		BuildFlags: []string{"-tags=mockc"},
 	}
 
