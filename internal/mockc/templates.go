@@ -64,7 +64,7 @@ func (recv *{{ $.Name }}) {{ $method.Signature }} {
 {{- if len .Params }}
 	// params
 	{{- range $param := $method.Params }}
-	recv.mockcs.{{ $method.Name }}.Params.{{ $param.Name }} = {{ $param.Name }}
+	recv.mockcs.{{ $method.Name }}.Params.{{ $param.Name }} = {{ $param.ParamName }}
 	{{- end }}
 {{- end }}
 	// body
@@ -140,48 +140,64 @@ func (m methodInfo) Signature() string {
 }
 
 type paramInfo struct {
-	Name, TypeString string
-	IsVariadic       bool
+	name, paramName, typeString string
+	isVariadic                  bool
 }
 
-func (p *paramInfo) ParamString() string {
-	return fmt.Sprintf("%v %v", p.Name, p.ParamType())
+func (p *paramInfo) Name() string {
+	return p.name
+}
+
+func (p *paramInfo) ParamName() string {
+	return p.paramName
 }
 
 func (p *paramInfo) ParamType() string {
-	typeString := p.TypeString
-	if p.IsVariadic {
+	typeString := p.typeString
+	if p.isVariadic {
 		typeString = fmt.Sprintf("...%v", typeString[2:])
 	}
 
 	return fmt.Sprintf("%v", typeString)
 }
 
+func (p *paramInfo) ParamString() string {
+	return fmt.Sprintf("%v %v", p.ParamName(), p.ParamType())
+}
+
 func (p *paramInfo) ArgString() string {
 	var variadic string
-	if p.IsVariadic {
+	if p.isVariadic {
 		variadic = "..."
 	}
 
-	return fmt.Sprintf("%v%v", p.Name, variadic)
+	return fmt.Sprintf("%v%v", p.paramName, variadic)
 }
 
 func (p *paramInfo) String() string {
-	return fmt.Sprintf("%v %v", p.Name, p.TypeString)
+	return fmt.Sprintf("%v %v", p.Name(), p.typeString)
 }
 
 type resultInfo struct {
-	Name, TypeString string
+	name, resultName, typeString string
+}
+
+func (r *resultInfo) Name() string {
+	return r.name
+}
+
+func (r *resultInfo) ResultName() string {
+	return r.resultName
 }
 
 func (r *resultInfo) ResultString() string {
-	return fmt.Sprintf("%v %v", r.Name, r.ResultType())
+	return fmt.Sprintf("%v %v", r.Name(), r.ResultType())
 }
 
 func (r *resultInfo) ResultType() string {
-	return r.TypeString
+	return r.typeString
 }
 
 func (r *resultInfo) String() string {
-	return fmt.Sprintf("%v %v", r.Name, r.TypeString)
+	return fmt.Sprintf("%v %v", r.Name(), r.typeString)
 }
