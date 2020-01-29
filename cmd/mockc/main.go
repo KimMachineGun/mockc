@@ -18,7 +18,7 @@ func main() {
 		log.Fatalln("cannot get working directory:", err)
 	}
 
-	m := mockc.NewMockc(wd, flag.Args())
+	m := mockc.New(wd, flag.Args())
 
 	err = m.Execute(context.Background())
 	if err != nil {

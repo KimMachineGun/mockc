@@ -9,17 +9,15 @@ import (
 )
 
 const (
-	packageName = "github.com/KimMachineGun/mockc"
+	mockcPath = "github.com/KimMachineGun/mockc"
 )
 
 type Mockc struct {
 	wd       string
 	patterns []string
-
-	pkgs []Package
 }
 
-func NewMockc(wd string, patterns []string) *Mockc {
+func New(wd string, patterns []string) *Mockc {
 	return &Mockc{
 		wd:       wd,
 		patterns: patterns,
@@ -32,22 +30,19 @@ func (m *Mockc) Execute(ctx context.Context) error {
 		return fmt.Errorf("cannot load package: %v", err)
 	}
 
-	mockPackages := make([]*Package, 0, len(pkgs))
-
 	for _, pkg := range pkgs {
-		p, err := newPackage(pkg)
+		if _, ok := pkg.Imports[mockcPath]; !ok {
+			continue
+		}
+
+		g, err := newGenerator(pkg)
 		if err != nil {
-			return fmt.Errorf("cannot create Package: %v", err)
+			return fmt.Errorf("package \"%s\": cannot create generator: %v", pkg.PkgPath, err)
 		}
 
-		if p.hasMockc() {
-			mockPackages = append(mockPackages, p)
-		}
-	}
-
-	for _, p := range mockPackages {
-		if err := p.GenerateResult(); err != nil {
-			return fmt.Errorf("cannot generate results: %v", err)
+		err = g.generate()
+		if err != nil {
+			return fmt.Errorf("package \"%s\": cannot generate mocks: %v", pkg.PkgPath, err)
 		}
 	}
 
@@ -59,6 +54,11 @@ func (m *Mockc) loadPackages(ctx context.Context, wd string, patterns []string) 
 		patterns = []string{"."}
 	}
 
+	patterns = append(make([]string, 0, len(patterns)), patterns...)
+	for i, pattern := range patterns {
+		patterns[i] = "pattern=" + pattern
+	}
+
 	cfg := &packages.Config{
 		Context:    ctx,
 		Mode:       packages.LoadAllSyntax,
@@ -67,12 +67,7 @@ func (m *Mockc) loadPackages(ctx context.Context, wd string, patterns []string) 
 		BuildFlags: []string{"-tags=mockc"},
 	}
 
-	escaped := make([]string, len(patterns))
-	for i := range patterns {
-		escaped[i] = "pattern=" + patterns[i]
-	}
-
-	pkgs, err := packages.Load(cfg, escaped...)
+	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
 		return nil, err
 	}
