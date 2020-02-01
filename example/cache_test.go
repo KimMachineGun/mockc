@@ -1,5 +1,3 @@
-// +build !mockc
-
 package ex
 
 import (

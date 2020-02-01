@@ -234,11 +234,8 @@ func (recv *MockcCache) Set(p0 string, p1 interface{}) error {
 }
 ```
 ### 4. Feel free to use the generated mock
-Please add `//+build !mockc` build tag to the file using the generated mocks.
 #### test code:
 ```go
-// +build !mockc
-
 package ex
 
 import (
