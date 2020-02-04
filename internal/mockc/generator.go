@@ -310,7 +310,7 @@ func (g *generator) typeString(t types.Type) string {
 		return fmt.Sprintf("struct{%s}", strings.Join(fields, ";"))
 	case *types.Named:
 		o := t.Obj()
-		if o.Pkg() == nil {
+		if o.Pkg() == nil || o.Pkg().Path() == g.pkg.PkgPath {
 			return o.Name()
 		}
 
