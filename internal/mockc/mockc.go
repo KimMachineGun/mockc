@@ -2,32 +2,19 @@ package mockc
 
 import (
 	"context"
-	"errors"
 	"fmt"
-
-	"golang.org/x/tools/go/packages"
+	"path/filepath"
+	"strings"
 )
 
 const (
 	mockcPath = "github.com/KimMachineGun/mockc"
 )
 
-type Mockc struct {
-	wd       string
-	patterns []string
-}
-
-func New(wd string, patterns []string) *Mockc {
-	return &Mockc{
-		wd:       wd,
-		patterns: patterns,
-	}
-}
-
-func (m *Mockc) Execute(ctx context.Context) error {
-	pkgs, err := m.loadPackages(ctx, m.wd, m.patterns)
+func Generate(ctx context.Context, wd string, patterns []string) error {
+	pkgs, err := loadPackages(ctx, wd, patterns)
 	if err != nil {
-		return fmt.Errorf("cannot load package: %v", err)
+		return fmt.Errorf("cannot load packages: %v", err)
 	}
 
 	for _, pkg := range pkgs {
@@ -35,12 +22,14 @@ func (m *Mockc) Execute(ctx context.Context) error {
 			continue
 		}
 
-		g, err := newGenerator(pkg)
+		g := newGenerator(pkg, filepath.Join(filepath.Dir(pkg.GoFiles[0]), "mockc_gen.go"))
+
+		err = g.loadMocks()
 		if err != nil {
-			return fmt.Errorf("package \"%s\": cannot create generator: %v", pkg.PkgPath, err)
+			return fmt.Errorf("package \"%s\": cannot load mocks: %v", pkg.PkgPath, err)
 		}
 
-		err = g.generate()
+		err = g.generate("mockc")
 		if err != nil {
 			return fmt.Errorf("package \"%s\": cannot generate mocks: %v", pkg.PkgPath, err)
 		}
@@ -49,42 +38,37 @@ func (m *Mockc) Execute(ctx context.Context) error {
 	return nil
 }
 
-func (m *Mockc) loadPackages(ctx context.Context, wd string, patterns []string) ([]*packages.Package, error) {
-	if len(patterns) == 0 {
-		patterns = []string{"."}
-	}
-
-	patterns = append(make([]string, 0, len(patterns)), patterns...)
-	for i, pattern := range patterns {
-		patterns[i] = "pattern=" + pattern
-	}
-
-	cfg := &packages.Config{
-		Context:    ctx,
-		Mode:       packages.LoadAllSyntax,
-		Dir:        wd,
-		BuildFlags: []string{"-tags=mockc"},
-	}
-
-	pkgs, err := packages.Load(cfg, patterns...)
+func GenerateWithFlags(ctx context.Context, wd string, name string, destination string, interfacePatterns []string) error {
+	destination, err := filepath.Abs(destination)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("cannot convert destination into absolute path: %v", err)
 	}
 
-	var errs []error
-	for _, p := range pkgs {
-		for _, e := range p.Errors {
-			errs = append(errs, e)
-		}
-	}
-	if len(errs) > 0 {
-		var errMessage string
-		for _, err := range errs {
-			errMessage += fmt.Sprintf("\n\t%v", err)
-		}
-
-		return nil, errors.New(errMessage)
+	destinationDir, fileName := filepath.Split(destination)
+	if filepath.Ext(fileName) != ".go" {
+		return fmt.Errorf("destination file should be go file: %s", fileName)
+	} else if destinationDir == "" {
+		destinationDir = "."
 	}
 
-	return pkgs, nil
+	pkgs, err := loadPackages(ctx, wd, []string{destinationDir})
+	if err != nil {
+		return fmt.Errorf("cannot load destination package: %v", err)
+	} else if len(pkgs) != 1 {
+		return fmt.Errorf("muptile destination packages are loaded: %v", pkgs)
+	}
+
+	g := newGenerator(pkgs[0], destination)
+
+	err = g.loadMockWithFlags(ctx, wd, name, interfacePatterns)
+	if err != nil {
+		return fmt.Errorf("cannot load mock: %v", err)
+	}
+
+	err = g.generate(fmt.Sprintf("mockc -name=%s -destination=%s %s", name, destination, strings.Join(interfacePatterns, " ")))
+	if err != nil {
+		return fmt.Errorf("cannot generate mock: %v", err)
+	}
+
+	return nil
 }

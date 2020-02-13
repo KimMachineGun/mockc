@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"os"
 
@@ -11,16 +10,21 @@ import (
 
 func main() {
 	log.SetFlags(0)
-	flag.Parse()
 
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Fatalln("cannot get working directory:", err)
 	}
 
-	m := mockc.New(wd, flag.Args())
-
-	err = m.Execute(context.Background())
+	c := LoadConfig()
+	if c.IsGeneratorMode() {
+		err = mockc.Generate(context.Background(), wd, c.args)
+	} else {
+		err = c.ValidateFlags()
+		if err == nil {
+			err = mockc.GenerateWithFlags(context.Background(), wd, c.name, c.destination, c.args)
+		}
+	}
 	if err != nil {
 		log.Fatalln(err)
 	}

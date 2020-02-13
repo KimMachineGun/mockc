@@ -2,6 +2,7 @@ package mockc
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -9,7 +10,6 @@ import (
 	"go/types"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -18,62 +18,19 @@ import (
 
 type generator struct {
 	pkg             *packages.Package
+	path            string
 	imports         map[string]string
 	importConflicts map[string]int
 	mocks           []mockInfo
 }
 
-func newGenerator(pkg *packages.Package) (*generator, error) {
-	g := &generator{
+func newGenerator(pkg *packages.Package, path string) *generator {
+	return &generator{
 		pkg:             pkg,
+		path:            path,
 		imports:         map[string]string{},
 		importConflicts: map[string]int{},
 	}
-
-	err := g.loadMocks()
-	if err != nil {
-		return nil, err
-	}
-
-	return g, nil
-}
-
-func (g *generator) generate() error {
-	path := filepath.Join(filepath.Dir(g.pkg.GoFiles[0]), "mockc_gen.go")
-	b := bytes.NewBuffer(nil)
-
-	err := tmpl.Execute(b, struct {
-		PackageName string
-		Imports     map[string]string
-		Mocks       []mockInfo
-	}{
-		PackageName: g.pkg.Name,
-		Imports:     g.imports,
-		Mocks:       g.mocks,
-	})
-	if err != nil {
-		return fmt.Errorf("cannot execute template: %v", err)
-	}
-
-	formatted, err := format.Source(b.Bytes())
-	if err != nil {
-		return fmt.Errorf("cannot format mockc generated code: %v", err)
-	}
-
-	f, err := os.Create(path)
-	defer f.Close()
-	if err != nil {
-		return fmt.Errorf("cannot create %s: %v", path, err)
-	}
-
-	_, err = f.Write(formatted)
-	if err != nil {
-		return fmt.Errorf("cannot write %s: %v", path, err)
-	}
-
-	log.Println("generated:", path)
-
-	return nil
 }
 
 func (g *generator) loadMocks() error {
@@ -105,7 +62,28 @@ func (g *generator) loadMocks() error {
 				switch obj.Name() {
 				case "Implements":
 					for _, arg := range call.Args {
-						inter, err := g.getValidInterface(arg)
+						t := g.pkg.TypesInfo.TypeOf(arg)
+
+						inter, ok := t.Underlying().(*types.Interface)
+						if !ok {
+							errorMessage := "non-interface:"
+							errorMessage += fmt.Sprintf("\n\tmock \"%s\": %v", fun.Name.Name, t)
+
+							return errors.New(errorMessage)
+						}
+
+						var isExternalInterface bool
+						switch arg := arg.(*ast.CallExpr).Fun.(type) {
+						case *ast.SelectorExpr:
+							isExternalInterface = g.pkg.TypesInfo.ObjectOf(arg.Sel).Pkg() != g.pkg.Types
+						case *ast.Ident:
+							isExternalInterface = g.pkg.TypesInfo.ObjectOf(arg).Pkg() != g.pkg.Types
+						case *ast.InterfaceType:
+						default:
+							return fmt.Errorf("unknown interface: %v", t)
+						}
+
+						err := g.validateInterface(inter, isExternalInterface)
 						if err != nil {
 							errorMessage := "invalid interface:"
 							errorMessage += fmt.Sprintf("\n\tmock \"%s\": %v", fun.Name.Name, err)
@@ -131,6 +109,114 @@ func (g *generator) loadMocks() error {
 			g.mocks = append(g.mocks, mock)
 		}
 	}
+
+	return nil
+}
+
+func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name string, interfacePatterns []string) error {
+	targetInterfaces := map[string][]string{}
+	for _, inter := range interfacePatterns {
+		idx := strings.LastIndex(inter, ".")
+		if idx == -1 {
+			errorMessage := "invalid interface pattern:"
+			errorMessage += fmt.Sprintf("\n\texpected interface pattern {package_path}.{interface_name}: actual %s", inter)
+
+			return errors.New(errorMessage)
+		}
+
+		pkgPath, interfaceName := inter[:idx], inter[idx+1:]
+		if pkgPath == "" || interfaceName == "" {
+			errorMessage := "invalid interface pattern:"
+			errorMessage += fmt.Sprintf("\n\texpected interface pattern {package-path}.{interface-name}: actual %s", inter)
+
+			return errors.New(errorMessage)
+		}
+
+		targetInterfaces[pkgPath] = append(targetInterfaces[pkgPath], interfaceName)
+	}
+
+	patterns := make([]string, 0, len(targetInterfaces))
+	for pkgPath, _ := range targetInterfaces {
+		patterns = append(patterns, pkgPath)
+	}
+
+	pkgs, err := loadPackages(ctx, wd, patterns)
+	if err != nil {
+		return fmt.Errorf("cannot load packages: %v", err)
+	}
+
+	interfaces := make([]*types.Interface, 0, len(interfacePatterns))
+	for _, pkg := range pkgs {
+		interfaceNames := targetInterfaces[pkg.PkgPath]
+		if len(interfaceNames) == 0 {
+			continue
+		}
+
+		f := newInterfaceFinder(pkg, interfaceNames)
+		for _, syntax := range pkg.Syntax {
+			ast.Walk(f, syntax)
+		}
+
+		for _, interfaceName := range interfaceNames {
+			inter, ok := f.result[interfaceName]
+			if !ok {
+				return fmt.Errorf("\n\tpackage \"%s\": cannot load interface: %s", pkg.PkgPath, interfaceName)
+			}
+
+			err = g.validateInterface(inter, g.pkg.PkgPath != pkg.PkgPath)
+			if err != nil {
+				return fmt.Errorf("\n\tpackage \"%s\": invalid interface: %v", pkg.PkgPath, err)
+			}
+
+			interfaces = append(interfaces, inter)
+		}
+	}
+
+	mock, err := g.newMock(name, interfaces)
+	if err != nil {
+		return fmt.Errorf("cannot create mock: %v", err)
+	}
+
+	g.mocks = []mockInfo{mock}
+
+	return nil
+}
+
+func (g *generator) generate(gogenerate string) error {
+	b := bytes.NewBuffer(nil)
+
+	err := tmpl.Execute(b, struct {
+		PackageName string
+		GoGenerate  string
+		Imports     map[string]string
+		Mocks       []mockInfo
+	}{
+		PackageName: g.pkg.Name,
+		GoGenerate:  gogenerate,
+		Imports:     g.imports,
+		Mocks:       g.mocks,
+	})
+	if err != nil {
+		return fmt.Errorf("cannot execute template: %v", err)
+	}
+
+	formatted, err := format.Source(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("cannot format mockc generated code: %v", err)
+	}
+
+	f, err := os.Create(g.path)
+	defer f.Close()
+	if err != nil {
+		return fmt.Errorf("cannot create %s: %v", g.path, err)
+	}
+
+	_, err = f.Write(formatted)
+	if err != nil {
+		return fmt.Errorf("cannot write %s: %v", g.path, err)
+	}
+
+	log.Println("generated:", g.path)
 
 	return nil
 }
@@ -241,33 +327,15 @@ func (g *generator) findMockcCalls(stmts []ast.Stmt) ([]*ast.CallExpr, error) {
 	return calls, nil
 }
 
-func (g *generator) getValidInterface(arg ast.Expr) (*types.Interface, error) {
-	t := g.pkg.TypesInfo.TypeOf(arg)
-
-	inter, ok := t.Underlying().(*types.Interface)
-	if !ok {
-		return nil, fmt.Errorf("'%v' is not a interface", t)
-	}
-
-	var external bool
-	switch arg := arg.(*ast.CallExpr).Fun.(type) {
-	case *ast.SelectorExpr:
-		external = g.pkg.TypesInfo.ObjectOf(arg.Sel).Pkg() != g.pkg.Types
-	case *ast.Ident:
-		external = g.pkg.TypesInfo.ObjectOf(arg).Pkg() != g.pkg.Types
-	case *ast.InterfaceType:
-	default:
-		return nil, fmt.Errorf("unknown interface: %v", t)
-	}
-
+func (g *generator) validateInterface(inter *types.Interface, isExternalInterface bool) error {
 	for i := 0; i < inter.NumMethods(); i++ {
 		method := inter.Method(i)
-		if external && !method.Exported() {
-			return nil, fmt.Errorf("cannot implement non-exported method: %s", method.FullName())
+		if isExternalInterface && !method.Exported() {
+			return fmt.Errorf("cannot implement non-exported method: %s", method.FullName())
 		}
 	}
 
-	return inter, nil
+	return nil
 }
 
 func (g *generator) typeString(t types.Type) string {
