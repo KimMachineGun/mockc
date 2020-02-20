@@ -26,19 +26,19 @@ func Generate(ctx context.Context, wd string, patterns []string) error {
 
 		err = g.loadMocks()
 		if err != nil {
-			return fmt.Errorf("package \"%s\": cannot load mocks: %v", pkg.PkgPath, err)
+			return fmt.Errorf("package %q: cannot load mocks: %v", pkg.PkgPath, err)
 		}
 
 		err = g.generate("mockc")
 		if err != nil {
-			return fmt.Errorf("package \"%s\": cannot generate mocks: %v", pkg.PkgPath, err)
+			return fmt.Errorf("package %q: cannot generate mocks: %v", pkg.PkgPath, err)
 		}
 	}
 
 	return nil
 }
 
-func GenerateWithFlags(ctx context.Context, wd string, name string, destination string, interfacePatterns []string) error {
+func GenerateWithFlags(ctx context.Context, wd string, name string, destination string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
 	destination, err := filepath.Abs(destination)
 	if err != nil {
 		return fmt.Errorf("cannot convert destination into absolute path: %v", err)
@@ -60,7 +60,7 @@ func GenerateWithFlags(ctx context.Context, wd string, name string, destination 
 
 	g := newGenerator(pkgs[0], destination)
 
-	err = g.loadMockWithFlags(ctx, wd, name, interfacePatterns)
+	err = g.loadMockWithFlags(ctx, wd, name, fieldNamePrefix, fieldNameSuffix, interfacePatterns)
 	if err != nil {
 		return fmt.Errorf("cannot load mock: %v", err)
 	}

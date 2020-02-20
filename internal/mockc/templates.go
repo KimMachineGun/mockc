@@ -25,7 +25,7 @@ import (
 type {{ $mock.Name }} struct {
 {{- range .Methods }}
 	// method: {{ .Name }}
-	_{{ .Name }} struct {
+	{{ .FieldName }} struct {
 		mu sync.Mutex
 		// basics
 		Called bool
@@ -72,24 +72,24 @@ type {{ $mock.Name }} struct {
 }
 {{ range $method := $mock.Methods }}
 func (recv *{{ $mock.Name }}) {{ $method.Signature }} {
-	recv._{{ $method.Name }}.mu.Lock()
-	defer recv._{{ $method.Name }}.mu.Unlock()
+	recv.{{ $method.FieldName }}.mu.Lock()
+	defer recv.{{ $method.FieldName }}.mu.Unlock()
 	// basics
-	recv._{{ $method.Name }}.Called = true
-	recv._{{ $method.Name }}.CallCount++
+	recv.{{ $method.FieldName }}.Called = true
+	recv.{{ $method.FieldName }}.CallCount++
 {{- if len .Params }}
 	// params
 	{{- range $param := $method.Params }}
-	recv._{{ $method.Name }}.Params.{{ $param.Name }} = {{ $param.ParamName }}
+	recv.{{ $method.FieldName }}.Params.{{ $param.Name }} = {{ $param.ParamName }}
 	{{- end }}
 {{- end }}
 	// body
-	if recv._{{ $method.Name }}.Body != nil {
-		{{ if len .Results }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv._{{ $method.Name }}.Results.{{ $val.Name }}{{ end }} = {{ end }}recv._{{ $method.Name }}.Body({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ArgString }}{{ end }})
+	if recv.{{ $method.FieldName }}.Body != nil {
+		{{ if len .Results }}{{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.{{ $method.FieldName }}.Results.{{ $val.Name }}{{ end }} = {{ end }}recv.{{ $method.FieldName }}.Body({{ range $idx, $val := .Params }}{{ if $idx }}, {{ end }}{{ $val.ArgString }}{{ end }})
 	}
 {{- if or (len .Params) (len .Results) }}
 	// call history
-	recv._{{ $method.Name }}.History = append(recv._{{ $method.Name }}.History, struct {
+	recv.{{ $method.FieldName }}.History = append(recv.{{ $method.FieldName }}.History, struct {
 	{{- if len .Params }}
 		Params struct {
 		{{- range .Params }}
@@ -106,16 +106,16 @@ func (recv *{{ $mock.Name }}) {{ $method.Signature }} {
 	{{- end }}
 	}{
 	{{- if len .Params }}
-		Params: recv._{{ $method.Name }}.Params,
+		Params: recv.{{ $method.FieldName }}.Params,
 	{{- end }}
 	{{- if len .Results}}
-		Results: recv._{{ $method.Name }}.Results,
+		Results: recv.{{ $method.FieldName }}.Results,
 	{{- end }}
 	})
 {{- end }}
 {{- if len .Results}}
 	// results
-	return {{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv._{{ $method.Name }}.Results.{{ $val.Name }}{{ end }}
+	return {{ range $idx, $val := .Results }}{{ if $idx }}, {{ end }}recv.{{ $method.FieldName }}.Results.{{ $val.Name }}{{ end }}
 {{- end }}
 }
 {{ end -}}
@@ -132,9 +132,10 @@ type mockInfo struct {
 }
 
 type methodInfo struct {
-	Name    string
-	Params  []paramInfo
-	Results []resultInfo
+	Name      string
+	FieldName string
+	Params    []paramInfo
+	Results   []resultInfo
 }
 
 func (m methodInfo) Signature() string {

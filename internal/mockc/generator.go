@@ -49,9 +49,12 @@ func (g *generator) loadMocks() error {
 			}
 
 			var (
-				mockName   = fun.Name.Name
-				interfaces []*types.Interface
+				mockName        = fun.Name.Name
+				fieldNamePrefix = "_"
+				fieldNameSuffix = ""
+				interfaces      []*types.Interface
 			)
+
 			for _, call := range calls {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok {
@@ -67,7 +70,7 @@ func (g *generator) loadMocks() error {
 						inter, ok := t.Underlying().(*types.Interface)
 						if !ok {
 							errorMessage := "non-interface:"
-							errorMessage += fmt.Sprintf("\n\tmock \"%s\": %v", fun.Name.Name, t)
+							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, t)
 
 							return errors.New(errorMessage)
 						}
@@ -80,28 +83,64 @@ func (g *generator) loadMocks() error {
 							isExternalInterface = g.pkg.TypesInfo.ObjectOf(arg).Pkg() != g.pkg.Types
 						case *ast.InterfaceType:
 						default:
-							return fmt.Errorf("unknown interface: %v", t)
+							errorMessage := "unknown interface:"
+							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, t)
+
+							return errors.New(errorMessage)
 						}
 
 						err := g.validateInterface(inter, isExternalInterface)
 						if err != nil {
 							errorMessage := "invalid interface:"
-							errorMessage += fmt.Sprintf("\n\tmock \"%s\": %v", fun.Name.Name, err)
+							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
 
 							return errors.New(errorMessage)
 						}
 
 						interfaces = append(interfaces, inter)
 					}
+				case "SetFieldNamePrefix":
+					arg := call.Args[0]
+					res, err := types.Eval(g.pkg.Fset, g.pkg.Types, arg.Pos(), types.ExprString(arg))
+					if err != nil {
+						errorMessage := "cannot set field name prefix:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
+
+						return errors.New(errorMessage)
+					}
+
+					val := res.Value.ExactString()
+
+					fieldNamePrefix = val[1 : len(val)-1]
+				case "SetFieldNameSuffix":
+					arg := call.Args[0]
+					res, err := types.Eval(g.pkg.Fset, g.pkg.Types, arg.Pos(), types.ExprString(arg))
+					if err != nil {
+						errorMessage := "cannot set field name suffix:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
+
+						return errors.New(errorMessage)
+					}
+
+					val := res.Value.ExactString()
+
+					fieldNameSuffix = val[1 : len(val)-1]
 				default:
 					errorMessage := "unknown mockc function call:"
-					errorMessage += fmt.Sprintf("\n\tmock \"%s\": mockc.%s", fun.Name.Name, obj.Name())
+					errorMessage += fmt.Sprintf("\n\tmock %q: mockc.%s", fun.Name.Name, obj.Name())
 
 					return errors.New(errorMessage)
 				}
 			}
 
-			mock, err := g.newMock(mockName, interfaces)
+			if fieldNamePrefix == "" && fieldNameSuffix == "" {
+				errorMessage := "at least one of the field name prefix and field name suffix must not be an empty string:"
+				errorMessage += fmt.Sprintf("\n\tmock %q: prefix(%q) suffix(%q)", fun.Name.Name, fieldNamePrefix, fieldNameSuffix)
+
+				return errors.New(errorMessage)
+			}
+
+			mock, err := g.newMock(mockName, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
 			if err != nil {
 				return err
 			}
@@ -113,7 +152,7 @@ func (g *generator) loadMocks() error {
 	return nil
 }
 
-func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name string, interfacePatterns []string) error {
+func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
 	targetInterfaces := map[string][]string{}
 	for _, inter := range interfacePatterns {
 		idx := strings.LastIndex(inter, ".")
@@ -160,19 +199,19 @@ func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name strin
 		for _, interfaceName := range interfaceNames {
 			inter, ok := f.result[interfaceName]
 			if !ok {
-				return fmt.Errorf("\n\tpackage \"%s\": cannot load interface: %s", pkg.PkgPath, interfaceName)
+				return fmt.Errorf("\n\tpackage %q: cannot load interface: %s", pkg.PkgPath, interfaceName)
 			}
 
 			err = g.validateInterface(inter, g.pkg.PkgPath != pkg.PkgPath)
 			if err != nil {
-				return fmt.Errorf("\n\tpackage \"%s\": invalid interface: %v", pkg.PkgPath, err)
+				return fmt.Errorf("\n\tpackage %q: invalid interface: %v", pkg.PkgPath, err)
 			}
 
 			interfaces = append(interfaces, inter)
 		}
 	}
 
-	mock, err := g.newMock(name, interfaces)
+	mock, err := g.newMock(name, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
 	if err != nil {
 		return fmt.Errorf("cannot create mock: %v", err)
 	}
@@ -225,7 +264,7 @@ func (g *generator) generate(gogenerate string) error {
 	return nil
 }
 
-func (g *generator) newMock(mockName string, interfaces []*types.Interface) (mockInfo, error) {
+func (g *generator) newMock(mockName string, fieldNameFormatter func(string) string, interfaces []*types.Interface) (mockInfo, error) {
 	mock := mockInfo{
 		Name: mockName,
 	}
@@ -236,7 +275,7 @@ func (g *generator) newMock(mockName string, interfaces []*types.Interface) (moc
 			fun := inter.Method(i)
 			if f, ok := funs[fun.Name()]; ok && fun.Type().(*types.Signature).String() != f.Type().(*types.Signature).String() {
 				errorMessage := "duplicated method:"
-				errorMessage += fmt.Sprintf("\n\tmock \"%s\": method \"%s\"", mock.Name, fun.Name())
+				errorMessage += fmt.Sprintf("\n\tmock %q: method %q", mock.Name, fun.Name())
 
 				return mockInfo{}, errors.New(errorMessage)
 			}
@@ -248,7 +287,8 @@ func (g *generator) newMock(mockName string, interfaces []*types.Interface) (moc
 	mock.Methods = make([]methodInfo, 0, len(funs))
 	for funName, fun := range funs {
 		methodInfo := methodInfo{
-			Name: funName,
+			Name:      funName,
+			FieldName: fieldNameFormatter(funName),
 		}
 
 		sig := fun.Type().(*types.Signature)
@@ -257,11 +297,8 @@ func (g *generator) newMock(mockName string, interfaces []*types.Interface) (moc
 		for i := 0; i < sig.Params().Len(); i++ {
 			param := sig.Params().At(i)
 
+			name := fmt.Sprintf("P%d", i)
 			paramName := fmt.Sprintf("p%d", i)
-			name := param.Name()
-			if name == "" || name == "_" {
-				name = paramName
-			}
 
 			methodInfo.Params = append(methodInfo.Params, paramInfo{
 				name:       name,
@@ -275,11 +312,8 @@ func (g *generator) newMock(mockName string, interfaces []*types.Interface) (moc
 		for i := 0; i < sig.Results().Len(); i++ {
 			result := sig.Results().At(i)
 
+			name := fmt.Sprintf("R%d", i)
 			resultName := fmt.Sprintf("r%d", i)
-			name := result.Name()
-			if name == "" || name == "_" {
-				name = resultName
-			}
 
 			methodInfo.Results = append(methodInfo.Results, resultInfo{
 				name:       name,
@@ -455,4 +489,10 @@ func (g *generator) getUniquePackageName(path string, name string) string {
 	g.imports[path] = uname
 
 	return uname
+}
+
+func newFieldNameFormatter(prefix, suffix string) func(string) string {
+	return func(field string) string {
+		return prefix + field + suffix
+	}
 }

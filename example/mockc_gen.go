@@ -20,19 +20,19 @@ type MockcCache struct {
 		// call history
 		History []struct {
 			Params struct {
-				key string
+				P0 string
 			}
 			Results struct {
-				err error
+				R0 error
 			}
 		}
 		// params
 		Params struct {
-			key string
+			P0 string
 		}
 		// results
 		Results struct {
-			err error
+			R0 error
 		}
 		// if it is not nil, it'll be called in the middle of the method.
 		Body func(string) error
@@ -46,21 +46,21 @@ type MockcCache struct {
 		// call history
 		History []struct {
 			Params struct {
-				key string
+				P0 string
 			}
 			Results struct {
-				val interface{}
-				err error
+				R0 interface{}
+				R1 error
 			}
 		}
 		// params
 		Params struct {
-			key string
+			P0 string
 		}
 		// results
 		Results struct {
-			val interface{}
-			err error
+			R0 interface{}
+			R1 error
 		}
 		// if it is not nil, it'll be called in the middle of the method.
 		Body func(string) (interface{}, error)
@@ -74,21 +74,21 @@ type MockcCache struct {
 		// call history
 		History []struct {
 			Params struct {
-				key string
-				val interface{}
+				P0 string
+				P1 interface{}
 			}
 			Results struct {
-				err error
+				R0 error
 			}
 		}
 		// params
 		Params struct {
-			key string
-			val interface{}
+			P0 string
+			P1 interface{}
 		}
 		// results
 		Results struct {
-			err error
+			R0 error
 		}
 		// if it is not nil, it'll be called in the middle of the method.
 		Body func(string, interface{}) error
@@ -102,25 +102,25 @@ func (recv *MockcCache) Del(p0 string) error {
 	recv._Del.Called = true
 	recv._Del.CallCount++
 	// params
-	recv._Del.Params.key = p0
+	recv._Del.Params.P0 = p0
 	// body
 	if recv._Del.Body != nil {
-		recv._Del.Results.err = recv._Del.Body(p0)
+		recv._Del.Results.R0 = recv._Del.Body(p0)
 	}
 	// call history
 	recv._Del.History = append(recv._Del.History, struct {
 		Params struct {
-			key string
+			P0 string
 		}
 		Results struct {
-			err error
+			R0 error
 		}
 	}{
 		Params:  recv._Del.Params,
 		Results: recv._Del.Results,
 	})
 	// results
-	return recv._Del.Results.err
+	return recv._Del.Results.R0
 }
 
 func (recv *MockcCache) Get(p0 string) (interface{}, error) {
@@ -130,26 +130,26 @@ func (recv *MockcCache) Get(p0 string) (interface{}, error) {
 	recv._Get.Called = true
 	recv._Get.CallCount++
 	// params
-	recv._Get.Params.key = p0
+	recv._Get.Params.P0 = p0
 	// body
 	if recv._Get.Body != nil {
-		recv._Get.Results.val, recv._Get.Results.err = recv._Get.Body(p0)
+		recv._Get.Results.R0, recv._Get.Results.R1 = recv._Get.Body(p0)
 	}
 	// call history
 	recv._Get.History = append(recv._Get.History, struct {
 		Params struct {
-			key string
+			P0 string
 		}
 		Results struct {
-			val interface{}
-			err error
+			R0 interface{}
+			R1 error
 		}
 	}{
 		Params:  recv._Get.Params,
 		Results: recv._Get.Results,
 	})
 	// results
-	return recv._Get.Results.val, recv._Get.Results.err
+	return recv._Get.Results.R0, recv._Get.Results.R1
 }
 
 func (recv *MockcCache) Set(p0 string, p1 interface{}) error {
@@ -159,25 +159,25 @@ func (recv *MockcCache) Set(p0 string, p1 interface{}) error {
 	recv._Set.Called = true
 	recv._Set.CallCount++
 	// params
-	recv._Set.Params.key = p0
-	recv._Set.Params.val = p1
+	recv._Set.Params.P0 = p0
+	recv._Set.Params.P1 = p1
 	// body
 	if recv._Set.Body != nil {
-		recv._Set.Results.err = recv._Set.Body(p0, p1)
+		recv._Set.Results.R0 = recv._Set.Body(p0, p1)
 	}
 	// call history
 	recv._Set.History = append(recv._Set.History, struct {
 		Params struct {
-			key string
-			val interface{}
+			P0 string
+			P1 interface{}
 		}
 		Results struct {
-			err error
+			R0 error
 		}
 	}{
 		Params:  recv._Set.Params,
 		Results: recv._Set.Results,
 	})
 	// results
-	return recv._Set.Results.err
+	return recv._Set.Results.R0
 }

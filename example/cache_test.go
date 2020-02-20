@@ -17,7 +17,7 @@ func HasKey(c Cache, key string) (bool, error) {
 func TestHasKey(t *testing.T) {
 	m := &MockcCache{}
 
-	m._Get.Results.val = struct{}{}
+	m._Get.Results.R0 = struct{}{}
 
 	key := "key"
 	expected := true
@@ -29,8 +29,8 @@ func TestHasKey(t *testing.T) {
 	if err != nil {
 		t.Errorf("err: %v", err)
 	}
-	if m._Get.Params.key != key {
-		t.Errorf("expected(%v) != actual(%v)", key, m._Get.Params.key)
+	if m._Get.Params.P0 != key {
+		t.Errorf("expected(%v) != actual(%v)", key, m._Get.Params.P0)
 	}
 }
 
@@ -53,8 +53,8 @@ func TestHasKey_WithMethodBodyInjection(t *testing.T) {
 	if err == nil {
 		t.Errorf("err: %v", err)
 	}
-	if key != m._Get.Params.key {
-		t.Errorf("param key: expected(%v) != actual(%v)", key, m._Get.Params.key)
+	if key != m._Get.Params.P0 {
+		t.Errorf("param key: expected(%v) != actual(%v)", key, m._Get.Params.P0)
 	}
 }
 
@@ -86,20 +86,20 @@ func TestHasKey_WithHistory(t *testing.T) {
 	}
 
 	for _, t := range table {
-		m._Get.Results.val = t.val
-		m._Get.Results.err = t.err
+		m._Get.Results.R0 = t.val
+		m._Get.Results.R1 = t.err
 
 		HasKey(m, t.key)
 	}
 
 	for idx, h := range m._Get.History {
-		if expected, actual := table[idx].expected, h.Results.val != nil; expected != actual {
+		if expected, actual := table[idx].expected, h.Results.R0 != nil; expected != actual {
 			t.Errorf("table[%v] result : expected(%v) != actual(%v)", idx, expected, actual)
 		}
-		if expected, actual := table[idx].err, h.Results.err; expected != actual {
+		if expected, actual := table[idx].err, h.Results.R1; expected != actual {
 			t.Errorf("table[%v] err : expected(%v) != actual(%v)", idx, expected, actual)
 		}
-		if expected, actual := table[idx].key, h.Params.key; expected != actual {
+		if expected, actual := table[idx].key, h.Params.P0; expected != actual {
 			t.Errorf("table[%v] param key: expected(%v) != actual(%v)", idx, expected, actual)
 		}
 	}

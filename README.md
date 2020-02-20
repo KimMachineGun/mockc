@@ -4,12 +4,14 @@ Mockc is a completely type-safe compile-time mock generator for Go. You can use 
 
 ## Features
 - Tools
-  - [x] Generate mock with mock generators
-  - [x] Generate mock with command line flags (experimental feature)
+  - [x] Generating mock with mock generators
+  - [x] Generating mock with command line flags (experimental feature)
 - Generated Mock
-  - [x] Method params and results
-  - [x] Method body injection
-  - [x] Method call history
+  - [x] Capturing params and results
+  - [x] Capturing method call history
+  - [x] Injecting method body
+  - [x] Customizing mock's field names with prefix and suffix
+    - default: `prefix:"_"`, `suffix:""`
 
 ## Installation
 ```
@@ -30,7 +32,7 @@ type Cache interface {
 If you want to generate mock that implements the above interface, follow the steps below.
 ### With Mock Generator
 #### 1. Write Mock Generator
-If you want to generate mock with mock generator, write a mock generator first. The mock will be generated in its generator path and it'll be named its generator's name. You can write multiple generators in one file, and multiple mocks will be generated. The mock generator should be consist of function calls of the `mockc` package(currently only `mockc.Implements()` is provided).
+If you want to generate mock with mock generator, write a mock generator first. The mock will be generated in its generator path and it'll be named its generator's name. You can write multiple generators in one file, and multiple mocks will be generated. The mock generator should be consist of function calls of the `mockc` package.
 ```go
 //+build mockc
 
@@ -44,6 +46,7 @@ func MockcCache() {
 	mockc.Implements(Cache(nil))
 }
 ```
+If you want to customize the field names of the mock, use `mockc.SetFieldNamePrefix()` or `mockc.SetFieldNameSuffix()`. (Notice: These functions only work with constant string value.)
 #### 2. Generate Mock
 This command will generate mock with your mock generator. The `<package-pattern>` argument will be used for loading mock generator with [golang.org/x/tools/go/packages#Load](https://godoc.org/golang.org/x/tools/go/packages#Load). If it's not provided, `.` will be used.
 ```sh
@@ -54,9 +57,10 @@ Ex: mock ./example
 #### 1. Generate Mock
 This command will generate mock with its command line flags. If you generate mock with this command, you don't need to write the mock generator. The `<target-interface-pattern>` should follow `{package_path}.{interface_name}` format.
 ```sh
-mockc -name=<mock-name> -destination=<output-file> <target-interface-pattern> [<target-interface-pattern>]
+mockc -name=<mock-name> -destination=<output-file> [-fieldNamePrefix=<prefix>] [-fieldNameSuffix=<suffix>] <target-interface-pattern> [<target-interface-pattern>]
 Ex: mockc -name=MockcCache -destination=./example/mockc_gen.go github.com/KimMachineGun/mockc/example.Cache
 ```
+If you want to customize the field names of the mock, pass string value to the `-fieldNamePrefix` or `-fieldNameSuffix`.
 ### Generated Mock	
 The `//go:generate` comment may vary depending on your mock generation command.
 ```go
@@ -82,19 +86,19 @@ type MockcCache struct {
 		// call history
 		History []struct {
 			Params struct {
-				key string
+				P0 string
 			}
 			Results struct {
-				err error
+				R0 error
 			}
 		}
 		// params
 		Params struct {
-			key string
+			P0 string
 		}
 		// results
 		Results struct {
-			err error
+			R0 error
 		}
 		// if it is not nil, it'll be called in the middle of the method.
 		Body func(string) error
@@ -108,21 +112,21 @@ type MockcCache struct {
 		// call history
 		History []struct {
 			Params struct {
-				key string
+				P0 string
 			}
 			Results struct {
-				val interface{}
-				err error
+				R0 interface{}
+				R1 error
 			}
 		}
 		// params
 		Params struct {
-			key string
+			P0 string
 		}
 		// results
 		Results struct {
-			val interface{}
-			err error
+			R0 interface{}
+			R1 error
 		}
 		// if it is not nil, it'll be called in the middle of the method.
 		Body func(string) (interface{}, error)
@@ -136,21 +140,21 @@ type MockcCache struct {
 		// call history
 		History []struct {
 			Params struct {
-				key string
-				val interface{}
+				P0 string
+				P1 interface{}
 			}
 			Results struct {
-				err error
+				R0 error
 			}
 		}
 		// params
 		Params struct {
-			key string
-			val interface{}
+			P0 string
+			P1 interface{}
 		}
 		// results
 		Results struct {
-			err error
+			R0 error
 		}
 		// if it is not nil, it'll be called in the middle of the method.
 		Body func(string, interface{}) error
@@ -164,25 +168,25 @@ func (recv *MockcCache) Del(p0 string) error {
 	recv._Del.Called = true
 	recv._Del.CallCount++
 	// params
-	recv._Del.Params.key = p0
+	recv._Del.Params.P0 = p0
 	// body
 	if recv._Del.Body != nil {
-		recv._Del.Results.err = recv._Del.Body(p0)
+		recv._Del.Results.R0 = recv._Del.Body(p0)
 	}
 	// call history
 	recv._Del.History = append(recv._Del.History, struct {
 		Params struct {
-			key string
+			P0 string
 		}
 		Results struct {
-			err error
+			R0 error
 		}
 	}{
 		Params:  recv._Del.Params,
 		Results: recv._Del.Results,
 	})
 	// results
-	return recv._Del.Results.err
+	return recv._Del.Results.R0
 }
 
 func (recv *MockcCache) Get(p0 string) (interface{}, error) {
@@ -192,26 +196,26 @@ func (recv *MockcCache) Get(p0 string) (interface{}, error) {
 	recv._Get.Called = true
 	recv._Get.CallCount++
 	// params
-	recv._Get.Params.key = p0
+	recv._Get.Params.P0 = p0
 	// body
 	if recv._Get.Body != nil {
-		recv._Get.Results.val, recv._Get.Results.err = recv._Get.Body(p0)
+		recv._Get.Results.R0, recv._Get.Results.R1 = recv._Get.Body(p0)
 	}
 	// call history
 	recv._Get.History = append(recv._Get.History, struct {
 		Params struct {
-			key string
+			P0 string
 		}
 		Results struct {
-			val interface{}
-			err error
+			R0 interface{}
+			R1 error
 		}
 	}{
 		Params:  recv._Get.Params,
 		Results: recv._Get.Results,
 	})
 	// results
-	return recv._Get.Results.val, recv._Get.Results.err
+	return recv._Get.Results.R0, recv._Get.Results.R1
 }
 
 func (recv *MockcCache) Set(p0 string, p1 interface{}) error {
@@ -221,27 +225,27 @@ func (recv *MockcCache) Set(p0 string, p1 interface{}) error {
 	recv._Set.Called = true
 	recv._Set.CallCount++
 	// params
-	recv._Set.Params.key = p0
-	recv._Set.Params.val = p1
+	recv._Set.Params.P0 = p0
+	recv._Set.Params.P1 = p1
 	// body
 	if recv._Set.Body != nil {
-		recv._Set.Results.err = recv._Set.Body(p0, p1)
+		recv._Set.Results.R0 = recv._Set.Body(p0, p1)
 	}
 	// call history
 	recv._Set.History = append(recv._Set.History, struct {
 		Params struct {
-			key string
-			val interface{}
+			P0 string
+			P1 interface{}
 		}
 		Results struct {
-			err error
+			R0 error
 		}
 	}{
 		Params:  recv._Set.Params,
 		Results: recv._Set.Results,
 	})
 	// results
-	return recv._Set.Results.err
+	return recv._Set.Results.R0
 }
 ```
 ### Feel Free to Use the Generated Mock
@@ -265,7 +269,7 @@ func HasKey(c Cache, key string) (bool, error) {
 func TestHasKey(t *testing.T) {
 	m := &MockcCache{}
 
-	m._Get.Results.val = struct{}{}
+	m._Get.Results.R0 = struct{}{}
 
 	key := "key"
 	expected := true
@@ -277,8 +281,8 @@ func TestHasKey(t *testing.T) {
 	if err != nil {
 		t.Errorf("err: %v", err)
 	}
-	if m._Get.Params.key != key {
-		t.Errorf("expected(%v) != actual(%v)", key, m._Get.Params.key)
+	if m._Get.Params.P0 != key {
+		t.Errorf("expected(%v) != actual(%v)", key, m._Get.Params.P0)
 	}
 }
 
@@ -301,8 +305,8 @@ func TestHasKey_WithMethodBodyInjection(t *testing.T) {
 	if err == nil {
 		t.Errorf("err: %v", err)
 	}
-	if key != m._Get.Params.key {
-		t.Errorf("param key: expected(%v) != actual(%v)", key, m._Get.Params.key)
+	if key != m._Get.Params.P0 {
+		t.Errorf("param key: expected(%v) != actual(%v)", key, m._Get.Params.P0)
 	}
 }
 
@@ -334,20 +338,20 @@ func TestHasKey_WithHistory(t *testing.T) {
 	}
 
 	for _, t := range table {
-		m._Get.Results.val = t.val
-		m._Get.Results.err = t.err
+		m._Get.Results.R0 = t.val
+		m._Get.Results.R1 = t.err
 
 		HasKey(m, t.key)
 	}
 
 	for idx, h := range m._Get.History {
-		if expected, actual := table[idx].expected, h.Results.val != nil; expected != actual {
+		if expected, actual := table[idx].expected, h.Results.R0 != nil; expected != actual {
 			t.Errorf("table[%v] result : expected(%v) != actual(%v)", idx, expected, actual)
 		}
-		if expected, actual := table[idx].err, h.Results.err; expected != actual {
+		if expected, actual := table[idx].err, h.Results.R1; expected != actual {
 			t.Errorf("table[%v] err : expected(%v) != actual(%v)", idx, expected, actual)
 		}
-		if expected, actual := table[idx].key, h.Params.key; expected != actual {
+		if expected, actual := table[idx].key, h.Params.P0; expected != actual {
 			t.Errorf("table[%v] param key: expected(%v) != actual(%v)", idx, expected, actual)
 		}
 	}
