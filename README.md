@@ -7,8 +7,8 @@ Mockc is a completely type-safe compile-time mock generator for Go. You can use 
   - [x] Generating mock with mock generators
   - [x] Generating mock with command line flags (experimental feature)
 - Generated Mock
-  - [x] Capturing params and results
-  - [x] Capturing method call history
+  - [x] Capturing params and results of the method
+  - [x] Capturing method calls
   - [x] Injecting method body
   - [x] Customizing mock's field names with prefix and suffix
     - default: `prefix:"_"`, `suffix:""`
