@@ -183,6 +183,10 @@ func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name strin
 }
 
 func (g *generator) generate(gogenerate string) error {
+	if len(g.mocks) == 0 {
+		return nil
+	}
+
 	b := bytes.NewBuffer(nil)
 
 	err := tmpl.Execute(b, struct {
