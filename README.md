@@ -1,6 +1,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/KimMachineGun/mockc)](https://goreportcard.com/report/github.com/KimMachineGun/mockc)
 # Mockc: Complie-time mock generator for Go
-Mockc is a completely type-safe compile-time mock generator for Go. You can use it just by writing the mock generators with `mockc.Implements()` or using it with command like flags.
+Mockc is a completely type-safe compile-time mock generator for Go. You can use it just by writing the mock generators with `mockc.Implement()` or using it with command like flags.
 
 ## Features
 - Tools
@@ -43,7 +43,7 @@ import (
 )
 
 func MockcCache() {
-	mockc.Implements(Cache(nil))
+	mockc.Implement(Cache(nil))
 }
 ```
 If you want to customize the field names of the mock, use `mockc.SetFieldNamePrefix()` or `mockc.SetFieldNameSuffix()`. (Notice: These functions only work with constant string value.)

@@ -7,5 +7,5 @@ import (
 )
 
 func MockcCache() {
-	mockc.Implements(Cache(nil))
+	mockc.Implement(Cache(nil))
 }

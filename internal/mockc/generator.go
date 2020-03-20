@@ -64,6 +64,9 @@ func (g *generator) loadMocks() error {
 				obj := g.pkg.TypesInfo.ObjectOf(sel.Sel)
 				switch obj.Name() {
 				case "Implements":
+					log.Println("mockc.Implements is deprecated. Please use mock.Implement instead.")
+					fallthrough
+				case "Implement":
 					for _, arg := range call.Args {
 						t := g.pkg.TypesInfo.TypeOf(arg)
 
