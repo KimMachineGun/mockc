@@ -429,19 +429,19 @@ func (g *generator) typeString(t types.Type) string {
 		case 0:
 			return fmt.Sprintf(
 				"func(%s)",
-				g.tupleTypeString(t.Params()),
+				g.tupleTypeString(t.Params(), t.Variadic()),
 			)
 		case 1:
 			return fmt.Sprintf(
 				"func(%s) %s",
-				g.tupleTypeString(t.Params()),
+				g.tupleTypeString(t.Params(), t.Variadic()),
 				g.typeString(t.Results().At(0).Type()),
 			)
 		default:
 			return fmt.Sprintf(
 				"func(%s)(%s)",
-				g.tupleTypeString(t.Params()),
-				g.tupleTypeString(t.Results()),
+				g.tupleTypeString(t.Params(), t.Variadic()),
+				g.tupleTypeString(t.Results(), false),
 			)
 		}
 	case *types.Interface:
@@ -452,11 +452,25 @@ func (g *generator) typeString(t types.Type) string {
 
 			switch sig.Results().Len() {
 			case 0:
-				methods = append(methods, fmt.Sprintf("%s(%s)", method.Name(), g.tupleTypeString(sig.Params())))
+				methods = append(methods, fmt.Sprintf(
+					"%s(%s)",
+					method.Name(),
+					g.tupleTypeString(sig.Params(), sig.Variadic()),
+				))
 			case 1:
-				methods = append(methods, fmt.Sprintf("%s(%s) %s", method.Name(), g.tupleTypeString(sig.Params()), g.typeString(sig.Results().At(0).Type())))
+				methods = append(methods, fmt.Sprintf(
+					"%s(%s) %s",
+					method.Name(),
+					g.tupleTypeString(sig.Params(), sig.Variadic()),
+					g.typeString(sig.Results().At(0).Type()),
+				))
 			default:
-				methods = append(methods, fmt.Sprintf("%s(%s) (%s)", method.Name(), g.tupleTypeString(sig.Params()), g.tupleTypeString(sig.Results())))
+				methods = append(methods, fmt.Sprintf(
+					"%s(%s) (%s)",
+					method.Name(),
+					g.tupleTypeString(sig.Params(), sig.Variadic()),
+					g.tupleTypeString(sig.Results(), false),
+				))
 			}
 		}
 
@@ -466,12 +480,15 @@ func (g *generator) typeString(t types.Type) string {
 	}
 }
 
-func (g *generator) tupleTypeString(t *types.Tuple) string {
+func (g *generator) tupleTypeString(t *types.Tuple, variadic bool) string {
 	var typeStrings []string
 	for i := 0; i < t.Len(); i++ {
-		v := t.At(i)
+		typeString := g.typeString(t.At(i).Type())
+		if variadic {
+			typeString = "..." + typeString[2:]
+		}
 
-		typeStrings = append(typeStrings, g.typeString(v.Type()))
+		typeStrings = append(typeStrings, typeString)
 	}
 
 	return strings.Join(typeStrings, ", ")
