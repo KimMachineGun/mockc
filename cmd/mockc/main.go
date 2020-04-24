@@ -22,7 +22,7 @@ func main() {
 	} else {
 		err = c.ValidateFlags()
 		if err == nil {
-			err = mockc.GenerateWithFlags(context.Background(), wd, c.name, c.fieldNamePrefix, c.fieldNameSuffix, c.destination, c.args)
+			err = mockc.GenerateWithFlags(context.Background(), wd, c.name, c.destination, c.fieldNamePrefix, c.fieldNameSuffix, c.args)
 		}
 	}
 	if err != nil {
