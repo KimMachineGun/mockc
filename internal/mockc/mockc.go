@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	mockcPath = "github.com/KimMachineGun/mockc"
+	mockcPath          = "github.com/KimMachineGun/mockc"
+	defaultDestination = "mockc_gen.go"
 )
 
 func Generate(ctx context.Context, wd string, patterns []string) error {
@@ -22,16 +23,16 @@ func Generate(ctx context.Context, wd string, patterns []string) error {
 			continue
 		}
 
-		g := newGenerator(pkg, filepath.Join(filepath.Dir(pkg.GoFiles[0]), "mockc_gen.go"))
-
-		err = g.loadMocks()
+		generators, err := newParser(pkg).Parse()
 		if err != nil {
-			return fmt.Errorf("package %q: cannot load mocks: %v", pkg.PkgPath, err)
+			return err
 		}
 
-		err = g.generate("mockc")
-		if err != nil {
-			return fmt.Errorf("package %q: cannot generate mocks: %v", pkg.PkgPath, err)
+		for _, generator := range generators {
+			err = generator.Generate("mockc")
+			if err != nil {
+				return fmt.Errorf("package %q: cannot generate mock: %v", pkg.PkgPath, err)
+			}
 		}
 	}
 
@@ -58,14 +59,14 @@ func GenerateWithFlags(ctx context.Context, wd string, name string, destination 
 		return fmt.Errorf("muptile destination packages are loaded: %v", pkgs)
 	}
 
-	g := newGenerator(pkgs[0], destination)
+	generator := newGenerator(pkgs[0], destination)
 
-	err = g.loadMockWithFlags(ctx, wd, name, fieldNamePrefix, fieldNameSuffix, interfacePatterns)
+	err = generator.addMockWithFlags(ctx, wd, name, fieldNamePrefix, fieldNameSuffix, interfacePatterns)
 	if err != nil {
-		return fmt.Errorf("cannot load mock: %v", err)
+		return err
 	}
 
-	err = g.generate(fmt.Sprintf("mockc -name=%s -destination=%s %s", name, destination, strings.Join(interfacePatterns, " ")))
+	err = generator.Generate(fmt.Sprintf("mockc -name=%s -destination=%s %s", name, destination, strings.Join(interfacePatterns, " ")))
 	if err != nil {
 		return fmt.Errorf("cannot generate mock: %v", err)
 	}

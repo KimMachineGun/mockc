@@ -33,129 +33,50 @@ func newGenerator(pkg *packages.Package, path string) *generator {
 	}
 }
 
-func (g *generator) loadMocks() error {
-	for _, syntax := range g.pkg.Syntax {
-		for _, decl := range syntax.Decls {
-			fun, ok := decl.(*ast.FuncDecl)
-			if !ok {
-				continue
-			}
-
-			calls, err := g.findMockcCalls(fun.Body.List)
-			if err != nil {
-				return err
-			} else if len(calls) == 0 {
-				continue
-			}
-
-			var (
-				mockName        = fun.Name.Name
-				fieldNamePrefix = "_"
-				fieldNameSuffix = ""
-				interfaces      []*types.Interface
-			)
-
-			for _, call := range calls {
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok {
-					continue
-				}
-
-				obj := g.pkg.TypesInfo.ObjectOf(sel.Sel)
-				switch obj.Name() {
-				case "Implements":
-					log.Println("mockc.Implements is deprecated. Please use mock.Implement instead.")
-					fallthrough
-				case "Implement":
-					for _, arg := range call.Args {
-						t := g.pkg.TypesInfo.TypeOf(arg)
-
-						inter, ok := t.Underlying().(*types.Interface)
-						if !ok {
-							errorMessage := "non-interface:"
-							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, t)
-
-							return errors.New(errorMessage)
-						}
-
-						var isExternalInterface bool
-						switch arg := arg.(*ast.CallExpr).Fun.(type) {
-						case *ast.SelectorExpr:
-							isExternalInterface = g.pkg.TypesInfo.ObjectOf(arg.Sel).Pkg() != g.pkg.Types
-						case *ast.Ident:
-							isExternalInterface = g.pkg.TypesInfo.ObjectOf(arg).Pkg() != g.pkg.Types
-						case *ast.InterfaceType:
-						default:
-							errorMessage := "unknown interface:"
-							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, t)
-
-							return errors.New(errorMessage)
-						}
-
-						err := g.validateInterface(inter, isExternalInterface)
-						if err != nil {
-							errorMessage := "invalid interface:"
-							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
-
-							return errors.New(errorMessage)
-						}
-
-						interfaces = append(interfaces, inter)
-					}
-				case "SetFieldNamePrefix":
-					arg := call.Args[0]
-					res, err := types.Eval(g.pkg.Fset, g.pkg.Types, arg.Pos(), types.ExprString(arg))
-					if err != nil {
-						errorMessage := "cannot set field name prefix:"
-						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
-
-						return errors.New(errorMessage)
-					}
-
-					val := res.Value.ExactString()
-
-					fieldNamePrefix = val[1 : len(val)-1]
-				case "SetFieldNameSuffix":
-					arg := call.Args[0]
-					res, err := types.Eval(g.pkg.Fset, g.pkg.Types, arg.Pos(), types.ExprString(arg))
-					if err != nil {
-						errorMessage := "cannot set field name suffix:"
-						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
-
-						return errors.New(errorMessage)
-					}
-
-					val := res.Value.ExactString()
-
-					fieldNameSuffix = val[1 : len(val)-1]
-				default:
-					errorMessage := "unknown mockc function call:"
-					errorMessage += fmt.Sprintf("\n\tmock %q: mockc.%s", fun.Name.Name, obj.Name())
-
-					return errors.New(errorMessage)
-				}
-			}
-
-			if fieldNamePrefix == "" && fieldNameSuffix == "" {
-				errorMessage := "at least one of the field name prefix and field name suffix must not be an empty string:"
-				errorMessage += fmt.Sprintf("\n\tmock %q: prefix(%q) suffix(%q)", fun.Name.Name, fieldNamePrefix, fieldNameSuffix)
-
-				return errors.New(errorMessage)
-			}
-
-			mock, err := g.newMock(mockName, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
-			if err != nil {
-				return err
-			}
-
-			g.mocks = append(g.mocks, mock)
-		}
+func (g *generator) Generate(gogenerate string) error {
+	if len(g.mocks) == 0 {
+		return nil
 	}
+
+	b := bytes.NewBuffer(nil)
+
+	err := tmpl.Execute(b, struct {
+		PackageName string
+		GoGenerate  string
+		Imports     map[string]string
+		Mocks       []mockInfo
+	}{
+		PackageName: g.pkg.Name,
+		GoGenerate:  gogenerate,
+		Imports:     g.imports,
+		Mocks:       g.mocks,
+	})
+	if err != nil {
+		return fmt.Errorf("cannot execute template: %v", err)
+	}
+
+	formatted, err := format.Source(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("cannot format mockc generated code: %v", err)
+	}
+
+	f, err := os.Create(g.path)
+	defer f.Close()
+	if err != nil {
+		return fmt.Errorf("cannot create %s: %v", g.path, err)
+	}
+
+	_, err = f.Write(formatted)
+	if err != nil {
+		return fmt.Errorf("cannot write %s: %v", g.path, err)
+	}
+
+	log.Println("generated:", g.path)
 
 	return nil
 }
 
-func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
+func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
 	targetInterfaces := map[string][]string{}
 	for _, inter := range interfacePatterns {
 		idx := strings.LastIndex(inter, ".")
@@ -202,72 +123,27 @@ func (g *generator) loadMockWithFlags(ctx context.Context, wd string, name strin
 		for _, interfaceName := range interfaceNames {
 			inter, ok := f.result[interfaceName]
 			if !ok {
-				return fmt.Errorf("\n\tpackage %q: cannot load interface: %s", pkg.PkgPath, interfaceName)
+				return fmt.Errorf("package %q: cannot load interface: %s", pkg.PkgPath, interfaceName)
 			}
 
-			err = g.validateInterface(inter, g.pkg.PkgPath != pkg.PkgPath)
+			err = validateInterface(inter, g.pkg.PkgPath != pkg.PkgPath)
 			if err != nil {
-				return fmt.Errorf("\n\tpackage %q: invalid interface: %v", pkg.PkgPath, err)
+				return fmt.Errorf("package %q: invalid interface: %v", pkg.PkgPath, err)
 			}
 
 			interfaces = append(interfaces, inter)
 		}
 	}
 
-	mock, err := g.newMock(name, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
+	err = g.addMock(name, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
 	if err != nil {
-		return fmt.Errorf("cannot create mock: %v", err)
+		return err
 	}
-
-	g.mocks = []mockInfo{mock}
 
 	return nil
 }
 
-func (g *generator) generate(gogenerate string) error {
-	if len(g.mocks) == 0 {
-		return nil
-	}
-
-	b := bytes.NewBuffer(nil)
-
-	err := tmpl.Execute(b, struct {
-		PackageName string
-		GoGenerate  string
-		Imports     map[string]string
-		Mocks       []mockInfo
-	}{
-		PackageName: g.pkg.Name,
-		GoGenerate:  gogenerate,
-		Imports:     g.imports,
-		Mocks:       g.mocks,
-	})
-	if err != nil {
-		return fmt.Errorf("cannot execute template: %v", err)
-	}
-
-	formatted, err := format.Source(b.Bytes())
-	if err != nil {
-		return fmt.Errorf("cannot format mockc generated code: %v", err)
-	}
-
-	f, err := os.Create(g.path)
-	defer f.Close()
-	if err != nil {
-		return fmt.Errorf("cannot create %s: %v", g.path, err)
-	}
-
-	_, err = f.Write(formatted)
-	if err != nil {
-		return fmt.Errorf("cannot write %s: %v", g.path, err)
-	}
-
-	log.Println("generated:", g.path)
-
-	return nil
-}
-
-func (g *generator) newMock(mockName string, fieldNameFormatter func(string) string, interfaces []*types.Interface) (mockInfo, error) {
+func (g *generator) addMock(mockName string, fieldNameFormatter func(string) string, interfaces []*types.Interface) error {
 	mock := mockInfo{
 		Name: mockName,
 	}
@@ -280,7 +156,7 @@ func (g *generator) newMock(mockName string, fieldNameFormatter func(string) str
 				errorMessage := "duplicated method:"
 				errorMessage += fmt.Sprintf("\n\tmock %q: method %q", mock.Name, fun.Name())
 
-				return mockInfo{}, errors.New(errorMessage)
+				return errors.New(errorMessage)
 			}
 
 			funs[fun.Name()] = fun
@@ -328,53 +204,7 @@ func (g *generator) newMock(mockName string, fieldNameFormatter func(string) str
 		mock.Methods = append(mock.Methods, methodInfo)
 	}
 
-	return mock, nil
-}
-
-func (g *generator) findMockcCalls(stmts []ast.Stmt) ([]*ast.CallExpr, error) {
-	var calls []*ast.CallExpr
-	var invalid bool
-
-	for _, stmt := range stmts {
-		switch stmt := stmt.(type) {
-		case *ast.ExprStmt:
-			call, ok := stmt.X.(*ast.CallExpr)
-			if !ok {
-				continue
-			}
-
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				continue
-			}
-
-			if g.pkg.TypesInfo.ObjectOf(sel.Sel).Pkg().Path() == mockcPath {
-				calls = append(calls, call)
-			}
-		case *ast.EmptyStmt, *ast.ReturnStmt:
-		default:
-			invalid = true
-		}
-	}
-
-	if len(calls) == 0 {
-		return nil, nil
-	}
-
-	if invalid {
-		return nil, errors.New("mockc generator should be consist of mockc function calls")
-	}
-
-	return calls, nil
-}
-
-func (g *generator) validateInterface(inter *types.Interface, isExternalInterface bool) error {
-	for i := 0; i < inter.NumMethods(); i++ {
-		method := inter.Method(i)
-		if isExternalInterface && !method.Exported() {
-			return fmt.Errorf("cannot implement non-exported method: %s", method.FullName())
-		}
-	}
+	g.mocks = append(g.mocks, mock)
 
 	return nil
 }
