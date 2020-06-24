@@ -10,6 +10,7 @@ import (
 	"go/types"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,8 @@ func (g *generator) Generate(gogenerate string) error {
 	}
 
 	b := bytes.NewBuffer(nil)
+
+	g.sortMocks()
 
 	err := tmpl.Execute(b, struct {
 		PackageName string
@@ -74,6 +77,17 @@ func (g *generator) Generate(gogenerate string) error {
 	log.Println("generated:", g.path)
 
 	return nil
+}
+
+func (g *generator) sortMocks() {
+	sort.Slice(g.mocks, func(i, j int) bool {
+		return g.mocks[i].Name < g.mocks[j].Name
+	})
+	for _, m := range g.mocks {
+		sort.Slice(m.Methods, func(i, j int) bool {
+			return m.Methods[i].Name < m.Methods[j].Name
+		})
+	}
 }
 
 func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
