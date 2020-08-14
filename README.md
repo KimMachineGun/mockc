@@ -1,3 +1,4 @@
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/KimMachineGun/mockc)](https://pkg.go.dev/github.com/KimMachineGun/mockc)
 [![Go Report Card](https://goreportcard.com/badge/github.com/KimMachineGun/mockc)](https://goreportcard.com/report/github.com/KimMachineGun/mockc)
 # Mockc: Complie-time mock generator for Go
 Mockc is a completely type-safe compile-time mock generator for Go. You can use it just by writing the mock generators with `mockc.Implement()` or using it with command like flags.
