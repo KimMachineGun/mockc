@@ -66,7 +66,7 @@ func GenerateWithFlags(ctx context.Context, wd string, name string, destination 
 		return err
 	}
 
-	err = generator.Generate(fmt.Sprintf("mockc -name=%s -destination=%s %s", name, destination, strings.Join(interfacePatterns, " ")))
+	err = generator.Generate(fmt.Sprintf("mockc \"-name=%s\" \"-destination=%s\" \"-fieldNamePrefix=%s\" \"-fieldNameSuffix=%s\" \"%s\"", name, fileName, fieldNamePrefix, fieldNameSuffix, strings.Join(interfacePatterns, " ")))
 	if err != nil {
 		return fmt.Errorf("cannot generate mock: %v", err)
 	}
