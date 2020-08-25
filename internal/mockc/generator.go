@@ -90,7 +90,7 @@ func (g *generator) sortMocks() {
 	}
 }
 
-func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
+func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string, withConstructor bool, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
 	targetInterfaces := map[string][]string{}
 	for _, inter := range interfacePatterns {
 		idx := strings.LastIndex(inter, ".")
@@ -149,7 +149,7 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 		}
 	}
 
-	err = g.addMock(name, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
+	err = g.addMock(name, withConstructor, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
 	if err != nil {
 		return err
 	}
@@ -157,9 +157,10 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 	return nil
 }
 
-func (g *generator) addMock(mockName string, fieldNameFormatter func(string) string, interfaces []*types.Interface) error {
+func (g *generator) addMock(mockName string, withConstructor bool, fieldNameFormatter func(string) string, interfaces []*types.Interface) error {
 	mock := mockInfo{
-		Name: mockName,
+		Name:           mockName,
+		HasConstructor: withConstructor,
 	}
 
 	funs := map[string]*types.Func{}

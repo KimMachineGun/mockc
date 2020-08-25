@@ -6,8 +6,9 @@ import (
 )
 
 type Config struct {
-	name            string
 	destination     string
+	name            string
+	withConstructor bool
 	fieldNamePrefix string
 	fieldNameSuffix string
 	args            []string
@@ -38,8 +39,9 @@ func (c Config) ValidateFlags() error {
 func LoadConfig() Config {
 	var c Config
 
-	flag.StringVar(&c.name, "name", "", "flag mode: name of the mock")
 	flag.StringVar(&c.destination, "destination", "", "flag mode: mock file destination")
+	flag.StringVar(&c.name, "name", "", "flag mode: name of the mock")
+	flag.BoolVar(&c.withConstructor, "withConstructor", false, "flag mode: generate constructor")
 	flag.StringVar(&c.fieldNamePrefix, "fieldNamePrefix", "_", "flag mode: prefix of the mock's field names")
 	flag.StringVar(&c.fieldNameSuffix, "fieldNameSuffix", "", "flag mode: suffix of the mock's field names")
 

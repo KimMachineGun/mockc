@@ -13,6 +13,7 @@ Mockc is a completely type-safe compile-time mock generator for Go. You can use 
   - [x] Injecting method body
   - [x] Customizing mock's field names with prefix and suffix
     - default: `prefix:"_"`, `suffix:""`
+  - [x] Generating mock constructor
 
 ## Installation
 ```
@@ -58,8 +59,8 @@ Ex: mock ./example
 #### 1. Generate Mock
 This command will generate mock with its command line flags. If you generate mock with this command, you don't need to write the mock generator. The `<target-interface-pattern>` should follow `{package_path}.{interface_name}` format.
 ```sh
-mockc -name=<mock-name> -destination=<output-file> [-fieldNamePrefix=<prefix>] [-fieldNameSuffix=<suffix>] <target-interface-pattern> [<target-interface-pattern>]
-Ex: mockc -name=MockcCache -destination=./example/mockc_gen.go github.com/KimMachineGun/mockc/example.Cache
+mockc -destination=<output-file> -name=<mock-name> [-withConstructor] [-fieldNamePrefix=<prefix>] [-fieldNameSuffix=<suffix>] <target-interface-pattern> [<target-interface-pattern>]
+Ex: mockc -destination=./example/mockc_gen.go -name=MockcCache github.com/KimMachineGun/mockc/example.Cache
 ```
 If you want to customize the field names of the mock, pass string value to the `-fieldNamePrefix` or `-fieldNameSuffix`.
 ### Generated Mock	

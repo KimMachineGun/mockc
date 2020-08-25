@@ -39,7 +39,7 @@ func Generate(ctx context.Context, wd string, patterns []string) error {
 	return nil
 }
 
-func GenerateWithFlags(ctx context.Context, wd string, name string, destination string, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
+func GenerateWithFlags(ctx context.Context, wd string, destination string, name string, withConstructor bool, fieldNamePrefix string, fieldNameSuffix string, interfacePatterns []string) error {
 	destination, err := filepath.Abs(destination)
 	if err != nil {
 		return fmt.Errorf("cannot convert destination into absolute path: %v", err)
@@ -61,12 +61,12 @@ func GenerateWithFlags(ctx context.Context, wd string, name string, destination 
 
 	generator := newGenerator(pkgs[0], destination)
 
-	err = generator.addMockWithFlags(ctx, wd, name, fieldNamePrefix, fieldNameSuffix, interfacePatterns)
+	err = generator.addMockWithFlags(ctx, wd, name, withConstructor, fieldNamePrefix, fieldNameSuffix, interfacePatterns)
 	if err != nil {
 		return err
 	}
 
-	err = generator.Generate(fmt.Sprintf("mockc \"-name=%s\" \"-destination=%s\" \"-fieldNamePrefix=%s\" \"-fieldNameSuffix=%s\" \"%s\"", name, fileName, fieldNamePrefix, fieldNameSuffix, strings.Join(interfacePatterns, " ")))
+	err = generator.Generate(fmt.Sprintf("mockc \"-destination=%s\" \"-name=%s\" \"-withConstructor=%t\" \"-fieldNamePrefix=%s\" \"-fieldNameSuffix=%s\" \"%s\"", fileName, name, withConstructor,fieldNamePrefix, fieldNameSuffix, strings.Join(interfacePatterns, " ")))
 	if err != nil {
 		return fmt.Errorf("cannot generate mock: %v", err)
 	}

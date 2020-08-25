@@ -70,6 +70,23 @@ type {{ $mock.Name }} struct {
 	}
 {{- end }}
 }
+{{ if $mock.HasConstructor }}
+func New{{ $mock.Name }}(
+	v ...interface{
+	{{- range $method := $mock.Methods }}
+		{{ $method.Signature }}
+	{{- end }}
+	},
+) *{{ $mock.Name }} {
+	m := &{{ $mock.Name }}{}
+	if len(v) > 0 {
+	{{- range $method := $mock.Methods }}
+		m.{{ $method.FieldName }}.Body = v[0].{{ $method.Name }}
+	{{- end }}
+	}
+	return m
+}
+{{ end }}
 {{ range $method := $mock.Methods }}
 func (recv *{{ $mock.Name }}) {{ $method.Signature }} {
 	recv.{{ $method.FieldName }}.mu.Lock()
@@ -128,6 +145,7 @@ var (
 
 type mockInfo struct {
 	Name    string
+	HasConstructor bool
 	Methods []methodInfo
 }
 

@@ -42,6 +42,7 @@ func (p *parser) Parse() ([]*generator, error) {
 			var (
 				destination     = defaultDestination
 				mockName        = fun.Name.Name
+				hasConstructor  bool
 				fieldNamePrefix = "_"
 				fieldNameSuffix = ""
 				interfaces      []*types.Interface
@@ -133,6 +134,8 @@ func (p *parser) Parse() ([]*generator, error) {
 					val := res.Value.ExactString()
 
 					destination = val[1 : len(val)-1]
+				case "WithConstructor":
+					hasConstructor = true
 				default:
 					errorMessage := "unknown mockc function call:"
 					errorMessage += fmt.Sprintf("\n\tmock %q: mockc.%s", fun.Name.Name, obj.Name())
@@ -153,7 +156,7 @@ func (p *parser) Parse() ([]*generator, error) {
 			}
 			g := destinationsAndGenerators[destination]
 
-			err = g.addMock(mockName, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
+			err = g.addMock(mockName, hasConstructor, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
 			if err != nil {
 				return nil, err
 			}
