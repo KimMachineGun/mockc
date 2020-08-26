@@ -1,6 +1,6 @@
 //+build mockc
 
-package ex
+package constructor
 
 import (
 	"github.com/KimMachineGun/mockc"
@@ -8,4 +8,5 @@ import (
 
 func MockcCache() {
 	mockc.Implement(Cache(nil))
+	mockc.WithConstructor()
 }

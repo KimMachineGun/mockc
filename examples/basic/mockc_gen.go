@@ -4,7 +4,7 @@
 //go:generate mockc
 // +build !mockc
 
-package ex
+package basic
 
 import (
 	"sync"
