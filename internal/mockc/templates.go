@@ -144,9 +144,9 @@ var (
 )
 
 type mockInfo struct {
-	Name    string
+	Name           string
 	HasConstructor bool
-	Methods []methodInfo
+	Methods        []methodInfo
 }
 
 type methodInfo struct {
