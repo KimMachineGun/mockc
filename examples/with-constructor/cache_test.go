@@ -14,26 +14,49 @@ func HasKey(c Cache, key string) (bool, error) {
 }
 
 func TestHasKey_WithConstructor(t *testing.T) {
-	mc := MapCache{}
-	m := NewMockcCache(mc)
+	m := NewMockcCache()
 
-	key := "key"
-	expected := false
-	actual, err := HasKey(m, key)
+	// set return value
+	m._Get.Results.R0 = struct{}{}
 
-	if actual != expected {
-		t.Errorf("result: expected(%v) != actual(%v)", expected, actual)
+	// execute
+	key := "test_key"
+	result, err := HasKey(m, key)
+
+	// assert
+	if !result {
+		t.Error("result should be true")
 	}
 	if err != nil {
-		t.Errorf("err: %v", err)
+		t.Error("err should be nil")
+	}
+	if m._Get.CallCount != 1 {
+		t.Errorf("Cache.Get should be called once: actual(%d)", m._Get.CallCount)
+	}
+	if m._Get.Params.P0 != key {
+		t.Errorf("Cache.Get should be called with %q: actual(%q)", key, m._Get.Params.P0)
+	}
+}
+
+func TestHasKey_WithMapCache(t *testing.T) {
+	// set the underlying implementation by passing real implementation to constructor
+	m := NewMockcCache(MapCache{})
+
+	// execute
+	key := "key"
+	result, err := HasKey(m, key)
+
+	// assert
+	if result {
+		t.Error("result should false")
+	}
+	if err != nil {
+		t.Error("err should be nil")
 	}
 	if m._Get.CallCount != 1 {
 		t.Errorf("Cache.Get should be called once: actual(%d)", m._Get.CallCount)
 	}
 	if m._Get.History[0].Params.P0 != key {
 		t.Errorf("Cache.Get should be called with %q: actual(%q)", key, m._Get.History[0].Params.P0)
-	}
-	if res := m._Get.History[0].Results; res.R0 != nil || res.R1 != nil {
-		t.Errorf("Cache.Get should return nil, nil: actual(%v, %v)", res.R0, res.R1)
 	}
 }
