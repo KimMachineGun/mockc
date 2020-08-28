@@ -13,7 +13,9 @@ func SetFieldNameSuffix(string) {}
 func SetDestination(string) {}
 
 // WithConstructor generates the constructor of mock.
-// You can set the underlying implementation by passing it to the constructor.
+// You can set the underlying implementation by passing real implementation to the constructor.
+// Check below example for details.
+// https://github.com/KimMachineGun/mockc/tree/master/examples/with-constructor
 func WithConstructor() {}
 
 // Deprecated: Please use Implement instead.
