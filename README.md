@@ -39,7 +39,7 @@ If you want to generate mock with mock generator, write a mock generator first. 
 ```go
 //+build mockc
 
-package ex
+package basic
 
 import (
 	"github.com/KimMachineGun/mockc"
