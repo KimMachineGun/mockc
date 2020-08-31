@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/types"
 	"log"
+	"path/filepath"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -40,6 +41,7 @@ func (p *parser) Parse() ([]*generator, error) {
 			}
 
 			var (
+				pkgDir          = filepath.Dir(p.pkg.Fset.File(decl.Pos()).Name())
 				destination     = defaultDestination
 				mockName        = fun.Name.Name
 				hasConstructor  bool
@@ -151,6 +153,7 @@ func (p *parser) Parse() ([]*generator, error) {
 				return nil, errors.New(errorMessage)
 			}
 
+			destination = filepath.Join(pkgDir, destination)
 			if destinationsAndGenerators[destination] == nil {
 				destinationsAndGenerators[destination] = newGenerator(p.pkg, destination)
 			}
