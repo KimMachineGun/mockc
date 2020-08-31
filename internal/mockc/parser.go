@@ -145,7 +145,7 @@ func (p *parser) Parse() ([]*generator, error) {
 
 					if filepath.Ext(val) != ".go" {
 						errorMessage := "cannot set destination:"
-						errorMessage += fmt.Sprintf("\n\tmock %q: %q is not a go file", fun.Name.Name, destination)
+						errorMessage += fmt.Sprintf("\n\tmock %q: %q is not a go file", fun.Name.Name, val)
 
 						return nil, errors.New(errorMessage)
 					}
