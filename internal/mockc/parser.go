@@ -134,8 +134,23 @@ func (p *parser) Parse() ([]*generator, error) {
 					}
 
 					val := res.Value.ExactString()
+					val = val[1 : len(val)-1]
 
-					destination = val[1 : len(val)-1]
+					if val == "" {
+						errorMessage := "cannot set destination:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: destination should not be an empty string", fun.Name.Name)
+
+						return nil, errors.New(errorMessage)
+					}
+
+					if filepath.Ext(val) != ".go" {
+						errorMessage := "cannot set destination:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %q is not a go file", fun.Name.Name, destination)
+
+						return nil, errors.New(errorMessage)
+					}
+
+					destination = val
 				case "WithConstructor":
 					hasConstructor = true
 				default:

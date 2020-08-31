@@ -47,7 +47,7 @@ func GenerateWithFlags(ctx context.Context, wd string, destination string, name 
 
 	destinationDir, fileName := filepath.Split(destination)
 	if filepath.Ext(fileName) != ".go" {
-		return fmt.Errorf("destination file should be go file: %s", fileName)
+		return fmt.Errorf("destination should be a go file: %s", fileName)
 	} else if destinationDir == "" {
 		destinationDir = "."
 	}
