@@ -1,6 +1,3 @@
-# ignore output file
-airbridge-identity-engine
-
 # Swap
 [._]*.s[a-v][a-z]
 [._]*.sw[a-p]
