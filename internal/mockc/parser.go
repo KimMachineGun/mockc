@@ -87,7 +87,7 @@ func (p *parser) Parse() ([]*generator, error) {
 							return nil, errors.New(errorMessage)
 						}
 
-						err := validateInterface(inter, isExternalInterface)
+						err := validateInterface(p.pkg, inter, isExternalInterface)
 						if err != nil {
 							errorMessage := "invalid interface:"
 							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
@@ -163,7 +163,9 @@ func (p *parser) Parse() ([]*generator, error) {
 
 			if fieldNamePrefix == "" && fieldNameSuffix == "" {
 				errorMessage := "at least one of the field name prefix and field name suffix must not be an empty string:"
-				errorMessage += fmt.Sprintf("\n\tmock %q: prefix(%q) suffix(%q)", fun.Name.Name, fieldNamePrefix, fieldNameSuffix)
+				errorMessage += fmt.Sprintf(
+					"\n\tmock %q: prefix(%q) suffix(%q)", fun.Name.Name, fieldNamePrefix, fieldNameSuffix,
+				)
 
 				return nil, errors.New(errorMessage)
 			}
@@ -172,9 +174,10 @@ func (p *parser) Parse() ([]*generator, error) {
 			if destinationsAndGenerators[destination] == nil {
 				destinationsAndGenerators[destination] = newGenerator(p.pkg, destination)
 			}
-			g := destinationsAndGenerators[destination]
 
-			err = g.addMock(mockName, hasConstructor, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
+			err = destinationsAndGenerators[destination].addMock(
+				mockName, hasConstructor, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces,
+			)
 			if err != nil {
 				return nil, err
 			}

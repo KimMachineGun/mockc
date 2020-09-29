@@ -133,7 +133,7 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 				return fmt.Errorf("package %q: cannot load interface: %s", pkg.PkgPath, interfaceName)
 			}
 
-			err = validateInterface(inter, g.pkg.PkgPath != pkg.PkgPath)
+			err = validateInterface(g.pkg, inter, g.pkg.PkgPath != pkg.PkgPath)
 			if err != nil {
 				return fmt.Errorf("package %q: invalid interface: %v", pkg.PkgPath, err)
 			}
