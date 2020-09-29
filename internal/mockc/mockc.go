@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	mockcPath          = "github.com/KimMachineGun/mockc"
-	defaultDestination = "mockc_gen.go"
+	mockcPath              = "github.com/KimMachineGun/mockc"
+	defaultDestination     = "mockc_gen.go"
+	defaultFieldNamePrefix = "_"
+	defaultFieldNameSuffix = ""
 )
 
 func Generate(ctx context.Context, wd string, patterns []string) error {

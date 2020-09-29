@@ -45,8 +45,8 @@ func (p *parser) Parse() ([]*generator, error) {
 				destination     = defaultDestination
 				mockName        = fun.Name.Name
 				hasConstructor  bool
-				fieldNamePrefix = "_"
-				fieldNameSuffix = ""
+				fieldNamePrefix = defaultFieldNamePrefix
+				fieldNameSuffix = defaultFieldNameSuffix
 				interfaces      []*types.Interface
 			)
 
