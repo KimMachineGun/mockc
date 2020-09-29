@@ -8,8 +8,8 @@ import (
 	"go/ast"
 	"go/format"
 	"go/types"
+	"io/ioutil"
 	"log"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,10 +39,9 @@ func (g *generator) Generate(gogenerate string) error {
 		return nil
 	}
 
-	b := bytes.NewBuffer(nil)
-
 	g.sortMocks()
 
+	b := bytes.NewBuffer(nil)
 	err := tmpl.Execute(b, struct {
 		PackageName string
 		GoGenerate  string
@@ -63,13 +62,7 @@ func (g *generator) Generate(gogenerate string) error {
 		return fmt.Errorf("cannot format mockc generated code: %v", err)
 	}
 
-	f, err := os.Create(g.path)
-	defer f.Close()
-	if err != nil {
-		return fmt.Errorf("cannot create %s: %v", g.path, err)
-	}
-
-	_, err = f.Write(formatted)
+	err = ioutil.WriteFile(g.path, formatted, 0666)
 	if err != nil {
 		return fmt.Errorf("cannot write %s: %v", g.path, err)
 	}
