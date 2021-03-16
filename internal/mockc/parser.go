@@ -47,7 +47,7 @@ func (p *parser) Parse() ([]*generator, error) {
 				hasConstructor  bool
 				fieldNamePrefix = defaultFieldNamePrefix
 				fieldNameSuffix = defaultFieldNameSuffix
-				interfaces      []*types.Interface
+				interfaces      []types.Type
 			)
 
 			for _, call := range calls {
@@ -65,7 +65,7 @@ func (p *parser) Parse() ([]*generator, error) {
 					for _, arg := range call.Args {
 						t := p.pkg.TypesInfo.TypeOf(arg)
 
-						inter, ok := t.Underlying().(*types.Interface)
+						_, ok := t.Underlying().(*types.Interface)
 						if !ok {
 							errorMessage := "non-interface:"
 							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, t)
@@ -73,29 +73,12 @@ func (p *parser) Parse() ([]*generator, error) {
 							return nil, errors.New(errorMessage)
 						}
 
-						var isExternalInterface bool
-						switch arg := arg.(*ast.CallExpr).Fun.(type) {
-						case *ast.SelectorExpr:
-							isExternalInterface = p.pkg.TypesInfo.ObjectOf(arg.Sel).Pkg() != p.pkg.Types
-						case *ast.Ident:
-							isExternalInterface = p.pkg.TypesInfo.ObjectOf(arg).Pkg() != p.pkg.Types
-						case *ast.InterfaceType:
-						default:
-							errorMessage := "unknown interface:"
-							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, t)
-
-							return nil, errors.New(errorMessage)
+						named, ok := t.(*types.Named)
+						if ok {
+							interfaces = append(interfaces, named)
+						} else {
+							interfaces = append(interfaces, t.Underlying())
 						}
-
-						err := validateInterface(p.pkg, inter, isExternalInterface)
-						if err != nil {
-							errorMessage := "invalid interface:"
-							errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
-
-							return nil, errors.New(errorMessage)
-						}
-
-						interfaces = append(interfaces, inter)
 					}
 				case "SetFieldNamePrefix":
 					arg := call.Args[0]

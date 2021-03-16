@@ -1,20 +1,19 @@
 package mockc
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/format"
 	"go/types"
 	"io/ioutil"
 	"log"
 	"sort"
-	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
+
+	"github.com/dave/jennifer/jen"
 )
 
 type generator struct {
@@ -41,28 +40,12 @@ func (g *generator) Generate(gogenerate string) error {
 
 	g.sortMocks()
 
-	b := bytes.NewBuffer(nil)
-	err := tmpl.Execute(b, struct {
-		PackageName string
-		GoGenerate  string
-		Imports     map[string]string
-		Mocks       []mockInfo
-	}{
-		PackageName: g.pkg.Name,
-		GoGenerate:  gogenerate,
-		Imports:     g.imports,
-		Mocks:       g.mocks,
-	})
+	b, err := render(g.pkg, g.mocks, gogenerate)
 	if err != nil {
 		return fmt.Errorf("cannot execute template: %v", err)
 	}
 
-	formatted, err := format.Source(b.Bytes())
-	if err != nil {
-		return fmt.Errorf("cannot format mockc generated code: %v", err)
-	}
-
-	err = ioutil.WriteFile(g.path, formatted, 0666)
+	err = ioutil.WriteFile(g.path, b, 0666)
 	if err != nil {
 		return fmt.Errorf("cannot write %s: %v", g.path, err)
 	}
@@ -74,11 +57,11 @@ func (g *generator) Generate(gogenerate string) error {
 
 func (g *generator) sortMocks() {
 	sort.Slice(g.mocks, func(i, j int) bool {
-		return g.mocks[i].Name < g.mocks[j].Name
+		return g.mocks[i].name < g.mocks[j].name
 	})
 	for _, m := range g.mocks {
-		sort.Slice(m.Methods, func(i, j int) bool {
-			return m.Methods[i].Name < m.Methods[j].Name
+		sort.Slice(m.methods, func(i, j int) bool {
+			return m.methods[i].typ.Name() < m.methods[j].typ.Name()
 		})
 	}
 }
@@ -115,7 +98,7 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 		return fmt.Errorf("cannot load packages: %v", err)
 	}
 
-	interfaces := make([]*types.Interface, 0, len(interfacePatterns))
+	interfaces := make([]types.Type, 0, len(interfacePatterns))
 	for _, pkg := range pkgs {
 		interfaceNames := targetInterfaces[pkg.PkgPath]
 		if len(interfaceNames) == 0 {
@@ -133,11 +116,6 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 				return fmt.Errorf("package %q: cannot load interface: %s", pkg.PkgPath, interfaceName)
 			}
 
-			err = validateInterface(g.pkg, inter, g.pkg.PkgPath != pkg.PkgPath)
-			if err != nil {
-				return fmt.Errorf("package %q: invalid interface: %v", pkg.PkgPath, err)
-			}
-
 			interfaces = append(interfaces, inter)
 		}
 	}
@@ -150,66 +128,70 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 	return nil
 }
 
-func (g *generator) addMock(mockName string, withConstructor bool, fieldNameFormatter func(string) string, interfaces []*types.Interface) error {
+func (g *generator) addMock(mockName string, withConstructor bool, fieldNameFormatter func(string) string, interfaces []types.Type) error {
 	mock := mockInfo{
-		Name:           mockName,
-		HasConstructor: withConstructor,
+		name:           mockName,
+		hasConstructor: withConstructor,
 	}
 
-	funs := map[string]*types.Func{}
+	var (
+		methods   []*types.Func
+		embeddeds []types.Type
+	)
 	for _, inter := range interfaces {
-		for i := 0; i < inter.NumMethods(); i++ {
-			fun := inter.Method(i)
-			if f, ok := funs[fun.Name()]; ok && fun.Type().(*types.Signature).String() != f.Type().(*types.Signature).String() {
-				errorMessage := "duplicated method:"
-				errorMessage += fmt.Sprintf("\n\tmock %q: method %q", mock.Name, fun.Name())
+		if _, ok := inter.(*types.Named); ok {
+			embeddeds = append(embeddeds, inter)
+			continue
+		}
 
-				return errors.New(errorMessage)
-			}
-
-			funs[fun.Name()] = fun
+		inter := inter.(*types.Interface)
+		for i := 0; i < inter.NumEmbeddeds(); i++ {
+			embeddeds = append(embeddeds, inter.EmbeddedType(i))
+		}
+		for i := 0; i < inter.NumExplicitMethods(); i++ {
+			methods = append(methods, inter.ExplicitMethod(i))
 		}
 	}
 
-	mock.Methods = make([]methodInfo, 0, len(funs))
-	for funName, fun := range funs {
+	mock.typ = types.NewInterfaceType(methods, embeddeds)
+	err := complete(mock.typ)
+	if err != nil {
+		errorMessage := err.Error()
+		errorMessage += fmt.Sprintf("\n\tmock %q", mock.name)
+
+		return errors.New(errorMessage)
+	}
+
+	mock.methods = make([]methodInfo, 0, mock.typ.NumMethods())
+	for i := 0; i < mock.typ.NumMethods(); i++ {
+		fun := mock.typ.Method(i)
 		methodInfo := methodInfo{
-			Name:      funName,
-			FieldName: fieldNameFormatter(funName),
+			typ:       fun,
+			fieldName: fieldNameFormatter(fun.Name()),
 		}
 
 		sig := fun.Type().(*types.Signature)
 
-		methodInfo.Params = make([]paramInfo, 0, sig.Params().Len())
+		methodInfo.params = make([]paramInfo, 0, sig.Params().Len())
 		for i := 0; i < sig.Params().Len(); i++ {
 			param := sig.Params().At(i)
 
-			name := fmt.Sprintf("P%d", i)
-			paramName := fmt.Sprintf("p%d", i)
-
-			methodInfo.Params = append(methodInfo.Params, paramInfo{
-				name:       name,
-				paramName:  paramName,
-				typeString: g.typeString(param.Type()),
+			methodInfo.params = append(methodInfo.params, paramInfo{
+				typ:        param,
 				isVariadic: i+1 == sig.Params().Len() && sig.Variadic(),
 			})
 		}
 
-		methodInfo.Results = make([]resultInfo, 0, sig.Results().Len())
+		methodInfo.results = make([]resultInfo, 0, sig.Results().Len())
 		for i := 0; i < sig.Results().Len(); i++ {
 			result := sig.Results().At(i)
 
-			name := fmt.Sprintf("R%d", i)
-			resultName := fmt.Sprintf("r%d", i)
-
-			methodInfo.Results = append(methodInfo.Results, resultInfo{
-				name:       name,
-				resultName: resultName,
-				typeString: g.typeString(result.Type()),
+			methodInfo.results = append(methodInfo.results, resultInfo{
+				typ: result,
 			})
 		}
 
-		mock.Methods = append(mock.Methods, methodInfo)
+		mock.methods = append(mock.methods, methodInfo)
 	}
 
 	g.mocks = append(g.mocks, mock)
@@ -217,136 +199,145 @@ func (g *generator) addMock(mockName string, withConstructor bool, fieldNameForm
 	return nil
 }
 
-func (g *generator) typeString(t types.Type) string {
+func complete(inter *types.Interface) (err error) {
+	defer func() {
+		rec := recover()
+		if rec != nil {
+			err = fmt.Errorf("%v", rec)
+		}
+	}()
+
+	inter.Complete()
+
+	return nil
+}
+
+func typeCode(stmt *jen.Statement, t types.Type) jen.Code {
 	switch t := t.(type) {
 	case *types.Basic:
-		return t.Name()
-	case *types.Pointer:
-		return "*" + g.typeString(t.Elem())
-	case *types.Slice:
-		return "[]" + g.typeString(t.Elem())
+		switch t.Name() {
+		case "bool":
+			return stmt.Bool()
+		case "int":
+			return stmt.Int()
+		case "int8":
+			return stmt.Int8()
+		case "int16":
+			return stmt.Int16()
+		case "int32":
+			return stmt.Int32()
+		case "int64":
+			return stmt.Int64()
+		case "uint":
+			return stmt.Uint()
+		case "uint8":
+			return stmt.Uint8()
+		case "uint16":
+			return stmt.Uint16()
+		case "uint32":
+			return stmt.Uint32()
+		case "uint64":
+			return stmt.Uint64()
+		case "uintptr":
+			return stmt.Uintptr()
+		case "float32":
+			return stmt.Float32()
+		case "float64":
+			return stmt.Float64()
+		case "complex64":
+			return stmt.Complex64()
+		case "complex128":
+			return stmt.Complex128()
+		case "string":
+			return stmt.String()
+		case "Pointer":
+			return stmt.Qual("unsafe", "Pointer")
+		case "byte":
+			return stmt.Byte()
+		case "rune":
+			return stmt.Rune()
+		}
 	case *types.Array:
-		return fmt.Sprintf("[%d]%s", t.Len(), g.typeString(t.Elem()))
-	case *types.Map:
-		kt := g.typeString(t.Key())
-		vt := g.typeString(t.Elem())
+		return typeCode(stmt.Index(jen.Lit(t.Len())), t.Elem())
+	case *types.Slice:
+		return typeCode(stmt.Index(), t.Elem())
+	case *types.Struct:
+		return stmt.StructFunc(func(g *jen.Group) {
+			for i := 0; i < t.NumFields(); i++ {
+				f := t.Field(i)
+				g.Do(func(s *jen.Statement) {
+					if f.Anonymous() {
+						typeCode(s, f.Type())
+					} else {
+						typeCode(s.Id(f.Name()), f.Type())
+					}
+				})
+			}
+		})
+	case *types.Pointer:
+		return typeCode(stmt.Op("*"), t.Elem())
+	case *types.Tuple:
+		return stmt.ValuesFunc(func(g *jen.Group) {
+			typeTupleCode(g, t, false)
+		})
+	case *types.Signature:
+		return stmt.Func().ParamsFunc(func(g *jen.Group) {
+			typeTupleCode(g, t.Params(), t.Variadic())
+		}).ParamsFunc(func(g *jen.Group) {
+			typeTupleCode(g, t.Results(), false)
+		})
+	case *types.Interface:
+		return stmt.InterfaceFunc(func(g *jen.Group) {
+			for i := 0; i < t.NumEmbeddeds(); i++ {
+				e := t.EmbeddedType(i)
+				g.Do(func(s *jen.Statement) {
+					typeCode(s, e)
+				})
+			}
+			for i := 0; i < t.NumExplicitMethods(); i++ {
+				m := t.ExplicitMethod(i)
+				sig := m.Type().(*types.Signature)
 
-		return fmt.Sprintf("map[%s]%s", kt, vt)
+				g.Do(func(s *jen.Statement) {
+					s.Id(m.Name()).ParamsFunc(func(g *jen.Group) {
+						typeTupleCode(g, sig.Params(), sig.Variadic())
+					}).ParamsFunc(func(g *jen.Group) {
+						typeTupleCode(g, sig.Results(), false)
+					})
+				})
+			}
+		})
+	case *types.Map:
+		return typeCode(stmt.Map(typeCode(nil, t.Key())), t.Elem())
 	case *types.Chan:
 		switch t.Dir() {
 		case types.SendRecv:
-			return "chan " + g.typeString(t.Elem())
+			return typeCode(stmt.Chan(), t.Elem())
 		case types.RecvOnly:
-			return "<-chan " + g.typeString(t.Elem())
+			return typeCode(stmt.Op("<-").Chan(), t.Elem())
 		default:
-			return "chan<- " + g.typeString(t.Elem())
+			return typeCode(stmt.Chan().Op("<-"), t.Elem())
 		}
-	case *types.Struct:
-		var fields []string
-
-		for i := 0; i < t.NumFields(); i++ {
-			f := t.Field(i)
-
-			if f.Anonymous() {
-				fields = append(fields, g.typeString(f.Type()))
-			} else {
-				fields = append(fields, fmt.Sprintf("%s %s", f.Name(), g.typeString(f.Type())))
-			}
-		}
-
-		return fmt.Sprintf("struct{%s}", strings.Join(fields, ";"))
 	case *types.Named:
-		o := t.Obj()
-		if o.Pkg() == nil || o.Pkg().Path() == g.pkg.PkgPath {
-			return o.Name()
+		if i := strings.LastIndex(t.String(), "."); i >= 0 {
+			return stmt.Qual(t.String()[:i], t.String()[i+1:])
 		}
-
-		return g.getUniquePackageName(o.Pkg().Path(), o.Pkg().Name()) + "." + o.Name()
-	case *types.Signature:
-		switch t.Results().Len() {
-		case 0:
-			return fmt.Sprintf(
-				"func(%s)",
-				g.tupleTypeString(t.Params(), t.Variadic()),
-			)
-		case 1:
-			return fmt.Sprintf(
-				"func(%s) %s",
-				g.tupleTypeString(t.Params(), t.Variadic()),
-				g.typeString(t.Results().At(0).Type()),
-			)
-		default:
-			return fmt.Sprintf(
-				"func(%s)(%s)",
-				g.tupleTypeString(t.Params(), t.Variadic()),
-				g.tupleTypeString(t.Results(), false),
-			)
-		}
-	case *types.Interface:
-		methods := make([]string, 0, t.NumMethods())
-		for i := 0; i < t.NumMethods(); i++ {
-			method := t.Method(i)
-			sig := method.Type().(*types.Signature)
-
-			switch sig.Results().Len() {
-			case 0:
-				methods = append(methods, fmt.Sprintf(
-					"%s(%s)",
-					method.Name(),
-					g.tupleTypeString(sig.Params(), sig.Variadic()),
-				))
-			case 1:
-				methods = append(methods, fmt.Sprintf(
-					"%s(%s) %s",
-					method.Name(),
-					g.tupleTypeString(sig.Params(), sig.Variadic()),
-					g.typeString(sig.Results().At(0).Type()),
-				))
-			default:
-				methods = append(methods, fmt.Sprintf(
-					"%s(%s) (%s)",
-					method.Name(),
-					g.tupleTypeString(sig.Params(), sig.Variadic()),
-					g.tupleTypeString(sig.Results(), false),
-				))
-			}
-		}
-
-		return fmt.Sprintf("interface{%s}", strings.Join(methods, ";"))
-	default:
-		return ""
+		return stmt.Id(t.String())
 	}
+	return stmt
 }
 
-func (g *generator) tupleTypeString(t *types.Tuple, variadic bool) string {
-	var typeStrings []string
+func typeTupleCode(g *jen.Group, t *types.Tuple, variadic bool) {
 	for i := 0; i < t.Len(); i++ {
-		typeString := g.typeString(t.At(i).Type())
-		if variadic {
-			typeString = "..." + typeString[2:]
-		}
-
-		typeStrings = append(typeStrings, typeString)
+		g.Do(func(s *jen.Statement) {
+			v := t.At(i)
+			if variadic && i+1 == t.Len() {
+				typeCode(s.Id("").Op("..."), v.Type().(*types.Slice).Elem())
+			} else {
+				typeCode(s.Id(""), v.Type())
+			}
+		})
 	}
-
-	return strings.Join(typeStrings, ", ")
-}
-
-func (g *generator) getUniquePackageName(path string, name string) string {
-	if uname, ok := g.imports[path]; ok {
-		return uname
-	}
-
-	uname := name
-	cnt := g.importConflicts[uname]
-	g.importConflicts[uname]++
-	if cnt != 0 {
-		uname += strconv.Itoa(cnt)
-	}
-
-	g.imports[path] = uname
-
-	return uname
 }
 
 func newFieldNameFormatter(prefix, suffix string) func(string) string {

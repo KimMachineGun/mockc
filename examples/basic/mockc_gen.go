@@ -6,9 +6,11 @@
 
 package basic
 
-import (
-	"sync"
-)
+import "sync"
+
+var _ interface {
+	Cache
+} = &MockcCache{}
 
 type MockcCache struct {
 	// method: Del

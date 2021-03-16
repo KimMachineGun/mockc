@@ -6,9 +6,11 @@
 
 package constructor
 
-import (
-	"sync"
-)
+import "sync"
+
+var _ interface {
+	Cache
+} = &MockcCache{}
 
 type MockcCache struct {
 	// method: Del
@@ -95,13 +97,9 @@ type MockcCache struct {
 	}
 }
 
-func NewMockcCache(
-	v ...interface {
-		Del(p0 string) error
-		Get(p0 string) (interface{}, error)
-		Set(p0 string, p1 interface{}) error
-	},
-) *MockcCache {
+func NewMockcCache(v ...interface {
+	Cache
+}) *MockcCache {
 	m := &MockcCache{}
 	if len(v) > 0 {
 		m._Del.Body = v[0].Del
