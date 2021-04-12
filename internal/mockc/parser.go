@@ -7,6 +7,7 @@ import (
 	"go/types"
 	"log"
 	"path/filepath"
+	"strconv"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -90,9 +91,13 @@ func (p *parser) Parse() ([]*generator, error) {
 						return nil, errors.New(errorMessage)
 					}
 
-					val := res.Value.ExactString()
+					fieldNamePrefix, err = strconv.Unquote(res.Value.ExactString())
+					if err != nil {
+						errorMessage := "cannot set field name prefix:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
 
-					fieldNamePrefix = val[1 : len(val)-1]
+						return nil, errors.New(errorMessage)
+					}
 				case "SetFieldNameSuffix":
 					arg := call.Args[0]
 					res, err := types.Eval(p.pkg.Fset, p.pkg.Types, arg.Pos(), types.ExprString(arg))
@@ -103,9 +108,13 @@ func (p *parser) Parse() ([]*generator, error) {
 						return nil, errors.New(errorMessage)
 					}
 
-					val := res.Value.ExactString()
+					fieldNameSuffix, err = strconv.Unquote(res.Value.ExactString())
+					if err != nil {
+						errorMessage := "cannot set field name suffix:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
 
-					fieldNameSuffix = val[1 : len(val)-1]
+						return nil, errors.New(errorMessage)
+					}
 				case "SetDestination":
 					arg := call.Args[0]
 					res, err := types.Eval(p.pkg.Fset, p.pkg.Types, arg.Pos(), types.ExprString(arg))
@@ -116,17 +125,18 @@ func (p *parser) Parse() ([]*generator, error) {
 						return nil, errors.New(errorMessage)
 					}
 
-					val := res.Value.ExactString()
-					val = val[1 : len(val)-1]
+					val, err := strconv.Unquote(res.Value.ExactString())
+					if err != nil {
+						errorMessage := "cannot set destination:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
 
-					if val == "" {
+						return nil, errors.New(errorMessage)
+					} else if val == "" {
 						errorMessage := "cannot set destination:"
 						errorMessage += fmt.Sprintf("\n\tmock %q: destination should not be an empty string", fun.Name.Name)
 
 						return nil, errors.New(errorMessage)
-					}
-
-					if filepath.Ext(val) != ".go" {
+					} else if filepath.Ext(val) != ".go" {
 						errorMessage := "cannot set destination:"
 						errorMessage += fmt.Sprintf("\n\tmock %q: %q is not a go file", fun.Name.Name, val)
 
@@ -179,9 +189,10 @@ func (p *parser) Parse() ([]*generator, error) {
 }
 
 func (p *parser) findMockcCalls(stmts []ast.Stmt) ([]*ast.CallExpr, error) {
-	var calls []*ast.CallExpr
-	var invalid bool
-
+	var (
+		calls   []*ast.CallExpr
+		invalid bool
+	)
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
 		case *ast.ExprStmt:
@@ -206,9 +217,7 @@ func (p *parser) findMockcCalls(stmts []ast.Stmt) ([]*ast.CallExpr, error) {
 
 	if len(calls) == 0 {
 		return nil, nil
-	}
-
-	if invalid {
+	} else if invalid {
 		return nil, errors.New("mock generator should be consist of mockc function calls")
 	}
 
