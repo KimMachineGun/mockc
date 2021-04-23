@@ -85,8 +85,8 @@ func render(pkg *packages.Package, mocks []mockInfo, gogenerate string) ([]byte,
 			}
 		})
 
-		if mock.hasConstructor {
-			f.Func().Id(fmt.Sprintf("New%s", mock.name)).Params(
+		if mock.constructor != "" {
+			f.Func().Id(mock.constructor).Params(
 				jen.Id("v").Op("...").Do(func(s *jen.Statement) {
 					typeCode(s, mock.typ)
 				}),
@@ -219,10 +219,10 @@ func render(pkg *packages.Package, mocks []mockInfo, gogenerate string) ([]byte,
 }
 
 type mockInfo struct {
-	typ            *types.Interface
-	name           string
-	hasConstructor bool
-	methods        []methodInfo
+	typ         *types.Interface
+	name        string
+	constructor string
+	methods     []methodInfo
 }
 
 type methodInfo struct {

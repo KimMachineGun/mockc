@@ -16,9 +16,16 @@ func SetDestination(destination string) {}
 
 // WithConstructor generates the constructor of mock.
 // You can set the underlying implementation by passing real implementation to the constructor.
+//
+// Internally, the WithConstructor is equivalent to the SetConstructorName("New" + MOCK_NAME)
+//
 // Check below example for details.
 // https://github.com/KimMachineGun/mockc/tree/master/examples/with-constructor
 func WithConstructor() {}
+
+// SetConstructorName sets the constructor name.
+// If the name is empty string, the constructor won't be generated.
+func SetConstructorName(name string) {}
 
 // Deprecated: Please use Implement instead.
 // Implements designates the interfaces to be implemented.

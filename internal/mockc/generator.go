@@ -120,7 +120,12 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 		}
 	}
 
-	err = g.addMock(name, withConstructor, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces)
+	var constructor string
+	if withConstructor {
+		constructor = "New" + name
+	}
+
+	err = g.addMock(name, constructor, interfaces, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix))
 	if err != nil {
 		return err
 	}
@@ -128,10 +133,10 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 	return nil
 }
 
-func (g *generator) addMock(mockName string, withConstructor bool, fieldNameFormatter func(string) string, interfaces []types.Type) error {
+func (g *generator) addMock(name string, constructor string, interfaces []types.Type, fieldNameFormatter func(string) string) error {
 	mock := mockInfo{
-		name:           mockName,
-		hasConstructor: withConstructor,
+		name:        name,
+		constructor: constructor,
 	}
 
 	var (
@@ -139,17 +144,16 @@ func (g *generator) addMock(mockName string, withConstructor bool, fieldNameForm
 		embeddeds []types.Type
 	)
 	for _, inter := range interfaces {
-		if _, ok := inter.(*types.Named); ok {
+		switch inter := inter.(type) {
+		case *types.Named:
 			embeddeds = append(embeddeds, inter)
-			continue
-		}
-
-		inter := inter.(*types.Interface)
-		for i := 0; i < inter.NumEmbeddeds(); i++ {
-			embeddeds = append(embeddeds, inter.EmbeddedType(i))
-		}
-		for i := 0; i < inter.NumExplicitMethods(); i++ {
-			methods = append(methods, inter.ExplicitMethod(i))
+		case *types.Interface:
+			for i := 0; i < inter.NumEmbeddeds(); i++ {
+				embeddeds = append(embeddeds, inter.EmbeddedType(i))
+			}
+			for i := 0; i < inter.NumExplicitMethods(); i++ {
+				methods = append(methods, inter.ExplicitMethod(i))
+			}
 		}
 	}
 

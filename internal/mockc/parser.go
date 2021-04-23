@@ -44,8 +44,8 @@ func (p *parser) Parse() ([]*generator, error) {
 			var (
 				pkgDir          = filepath.Dir(p.pkg.Fset.File(decl.Pos()).Name())
 				destination     = defaultDestination
-				mockName        = fun.Name.Name
-				hasConstructor  bool
+				name            = fun.Name.Name
+				constructor     string
 				fieldNamePrefix = defaultFieldNamePrefix
 				fieldNameSuffix = defaultFieldNameSuffix
 				interfaces      []types.Type
@@ -145,7 +145,24 @@ func (p *parser) Parse() ([]*generator, error) {
 
 					destination = val
 				case "WithConstructor":
-					hasConstructor = true
+					constructor = "New" + name
+				case "SetConstructorName":
+					arg := call.Args[0]
+					res, err := types.Eval(p.pkg.Fset, p.pkg.Types, arg.Pos(), types.ExprString(arg))
+					if err != nil {
+						errorMessage := "cannot set constructor name:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
+
+						return nil, errors.New(errorMessage)
+					}
+
+					constructor, err = strconv.Unquote(res.Value.ExactString())
+					if err != nil {
+						errorMessage := "cannot set constructor name:"
+						errorMessage += fmt.Sprintf("\n\tmock %q: %v", fun.Name.Name, err)
+
+						return nil, errors.New(errorMessage)
+					}
 				default:
 					errorMessage := "unknown mockc function call:"
 					errorMessage += fmt.Sprintf("\n\tmock %q: mockc.%s", fun.Name.Name, obj.Name())
@@ -169,7 +186,10 @@ func (p *parser) Parse() ([]*generator, error) {
 			}
 
 			err = destinationsAndGenerators[destination].addMock(
-				mockName, hasConstructor, newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix), interfaces,
+				name,
+				constructor,
+				interfaces,
+				newFieldNameFormatter(fieldNamePrefix, fieldNameSuffix),
 			)
 			if err != nil {
 				return nil, err
