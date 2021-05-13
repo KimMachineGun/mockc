@@ -25,7 +25,7 @@ func Generate(ctx context.Context, wd string, patterns []string) error {
 			continue
 		}
 
-		generators, err := newParser(pkg).Parse()
+		generators, err := newParser(pkg).parse()
 		if err != nil {
 			return err
 		}

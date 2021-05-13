@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 
@@ -216,6 +217,134 @@ func render(pkg *packages.Package, mocks []mockInfo, gogenerate string) ([]byte,
 	}
 
 	return b.Bytes(), nil
+}
+
+func typeCode(stmt *jen.Statement, t types.Type) jen.Code {
+	switch t := t.(type) {
+	case *types.Basic:
+		switch t.Name() {
+		case "bool":
+			return stmt.Bool()
+		case "int":
+			return stmt.Int()
+		case "int8":
+			return stmt.Int8()
+		case "int16":
+			return stmt.Int16()
+		case "int32":
+			return stmt.Int32()
+		case "int64":
+			return stmt.Int64()
+		case "uint":
+			return stmt.Uint()
+		case "uint8":
+			return stmt.Uint8()
+		case "uint16":
+			return stmt.Uint16()
+		case "uint32":
+			return stmt.Uint32()
+		case "uint64":
+			return stmt.Uint64()
+		case "uintptr":
+			return stmt.Uintptr()
+		case "float32":
+			return stmt.Float32()
+		case "float64":
+			return stmt.Float64()
+		case "complex64":
+			return stmt.Complex64()
+		case "complex128":
+			return stmt.Complex128()
+		case "string":
+			return stmt.String()
+		case "Pointer":
+			return stmt.Qual("unsafe", "Pointer")
+		case "byte":
+			return stmt.Byte()
+		case "rune":
+			return stmt.Rune()
+		}
+	case *types.Array:
+		return typeCode(stmt.Index(jen.Lit(t.Len())), t.Elem())
+	case *types.Slice:
+		return typeCode(stmt.Index(), t.Elem())
+	case *types.Struct:
+		return stmt.StructFunc(func(g *jen.Group) {
+			for i := 0; i < t.NumFields(); i++ {
+				f := t.Field(i)
+				g.Do(func(s *jen.Statement) {
+					if f.Anonymous() {
+						typeCode(s, f.Type())
+					} else {
+						typeCode(s.Id(f.Name()), f.Type())
+					}
+				})
+			}
+		})
+	case *types.Pointer:
+		return typeCode(stmt.Op("*"), t.Elem())
+	case *types.Tuple:
+		return stmt.ValuesFunc(func(g *jen.Group) {
+			typeTupleCode(g, t, false)
+		})
+	case *types.Signature:
+		return stmt.Func().ParamsFunc(func(g *jen.Group) {
+			typeTupleCode(g, t.Params(), t.Variadic())
+		}).ParamsFunc(func(g *jen.Group) {
+			typeTupleCode(g, t.Results(), false)
+		})
+	case *types.Interface:
+		return stmt.InterfaceFunc(func(g *jen.Group) {
+			for i := 0; i < t.NumEmbeddeds(); i++ {
+				e := t.EmbeddedType(i)
+				g.Do(func(s *jen.Statement) {
+					typeCode(s, e)
+				})
+			}
+			for i := 0; i < t.NumExplicitMethods(); i++ {
+				m := t.ExplicitMethod(i)
+				sig := m.Type().(*types.Signature)
+
+				g.Do(func(s *jen.Statement) {
+					s.Id(m.Name()).ParamsFunc(func(g *jen.Group) {
+						typeTupleCode(g, sig.Params(), sig.Variadic())
+					}).ParamsFunc(func(g *jen.Group) {
+						typeTupleCode(g, sig.Results(), false)
+					})
+				})
+			}
+		})
+	case *types.Map:
+		return typeCode(stmt.Map(typeCode(nil, t.Key())), t.Elem())
+	case *types.Chan:
+		switch t.Dir() {
+		case types.SendRecv:
+			return typeCode(stmt.Chan(), t.Elem())
+		case types.RecvOnly:
+			return typeCode(stmt.Op("<-").Chan(), t.Elem())
+		default:
+			return typeCode(stmt.Chan().Op("<-"), t.Elem())
+		}
+	case *types.Named:
+		if i := strings.LastIndex(t.String(), "."); i >= 0 {
+			return stmt.Qual(t.String()[:i], t.String()[i+1:])
+		}
+		return stmt.Id(t.String())
+	}
+	return stmt
+}
+
+func typeTupleCode(g *jen.Group, t *types.Tuple, variadic bool) {
+	for i := 0; i < t.Len(); i++ {
+		g.Do(func(s *jen.Statement) {
+			v := t.At(i)
+			if variadic && i+1 == t.Len() {
+				typeCode(s.Id("").Op("..."), v.Type().(*types.Slice).Elem())
+			} else {
+				typeCode(s.Id(""), v.Type())
+			}
+		})
+	}
 }
 
 type mockInfo struct {

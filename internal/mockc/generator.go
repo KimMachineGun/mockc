@@ -12,8 +12,6 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/packages"
-
-	"github.com/dave/jennifer/jen"
 )
 
 type generator struct {
@@ -134,11 +132,53 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 }
 
 func (g *generator) addMock(name string, constructor string, interfaces []types.Type, fieldNameFormatter func(string) string) error {
-	mock := mockInfo{
-		name:        name,
-		constructor: constructor,
+	iface, err := overlapInterfaces(interfaces)
+	if err != nil {
+		errorMessage := err.Error()
+		errorMessage += fmt.Sprintf("\n\tmock %q", name)
+
+		return errors.New(errorMessage)
 	}
 
+	methods := make([]methodInfo, iface.NumMethods())
+	for i := 0; i < iface.NumMethods(); i++ {
+		method := iface.Method(i)
+		sig := method.Type().(*types.Signature)
+
+		params := make([]paramInfo, sig.Params().Len())
+		for i := 0; i < sig.Params().Len(); i++ {
+			params[i] = paramInfo{
+				typ:        sig.Params().At(i),
+				isVariadic: i+1 == sig.Params().Len() && sig.Variadic(),
+			}
+		}
+
+		results := make([]resultInfo, sig.Results().Len())
+		for i := 0; i < sig.Results().Len(); i++ {
+			results[i] = resultInfo{
+				typ: sig.Results().At(i),
+			}
+		}
+
+		methods[i] = methodInfo{
+			typ:       method,
+			fieldName: fieldNameFormatter(method.Name()),
+			params:    params,
+			results:   results,
+		}
+	}
+
+	g.mocks = append(g.mocks, mockInfo{
+		typ:         iface,
+		name:        name,
+		constructor: constructor,
+		methods:     methods,
+	})
+
+	return nil
+}
+
+func overlapInterfaces(interfaces []types.Type) (iface *types.Interface, err error) {
 	var (
 		methods   []*types.Func
 		embeddeds []types.Type
@@ -157,191 +197,16 @@ func (g *generator) addMock(name string, constructor string, interfaces []types.
 		}
 	}
 
-	mock.typ = types.NewInterfaceType(methods, embeddeds)
-	err := complete(mock.typ)
-	if err != nil {
-		errorMessage := err.Error()
-		errorMessage += fmt.Sprintf("\n\tmock %q", mock.name)
-
-		return errors.New(errorMessage)
-	}
-
-	mock.methods = make([]methodInfo, 0, mock.typ.NumMethods())
-	for i := 0; i < mock.typ.NumMethods(); i++ {
-		fun := mock.typ.Method(i)
-		methodInfo := methodInfo{
-			typ:       fun,
-			fieldName: fieldNameFormatter(fun.Name()),
-		}
-
-		sig := fun.Type().(*types.Signature)
-
-		methodInfo.params = make([]paramInfo, 0, sig.Params().Len())
-		for i := 0; i < sig.Params().Len(); i++ {
-			param := sig.Params().At(i)
-
-			methodInfo.params = append(methodInfo.params, paramInfo{
-				typ:        param,
-				isVariadic: i+1 == sig.Params().Len() && sig.Variadic(),
-			})
-		}
-
-		methodInfo.results = make([]resultInfo, 0, sig.Results().Len())
-		for i := 0; i < sig.Results().Len(); i++ {
-			result := sig.Results().At(i)
-
-			methodInfo.results = append(methodInfo.results, resultInfo{
-				typ: result,
-			})
-		}
-
-		mock.methods = append(mock.methods, methodInfo)
-	}
-
-	g.mocks = append(g.mocks, mock)
-
-	return nil
-}
-
-func complete(inter *types.Interface) (err error) {
+	iface = types.NewInterfaceType(methods, embeddeds)
 	defer func() {
 		rec := recover()
 		if rec != nil {
 			err = fmt.Errorf("%v", rec)
 		}
 	}()
+	iface.Complete()
 
-	inter.Complete()
-
-	return nil
-}
-
-func typeCode(stmt *jen.Statement, t types.Type) jen.Code {
-	switch t := t.(type) {
-	case *types.Basic:
-		switch t.Name() {
-		case "bool":
-			return stmt.Bool()
-		case "int":
-			return stmt.Int()
-		case "int8":
-			return stmt.Int8()
-		case "int16":
-			return stmt.Int16()
-		case "int32":
-			return stmt.Int32()
-		case "int64":
-			return stmt.Int64()
-		case "uint":
-			return stmt.Uint()
-		case "uint8":
-			return stmt.Uint8()
-		case "uint16":
-			return stmt.Uint16()
-		case "uint32":
-			return stmt.Uint32()
-		case "uint64":
-			return stmt.Uint64()
-		case "uintptr":
-			return stmt.Uintptr()
-		case "float32":
-			return stmt.Float32()
-		case "float64":
-			return stmt.Float64()
-		case "complex64":
-			return stmt.Complex64()
-		case "complex128":
-			return stmt.Complex128()
-		case "string":
-			return stmt.String()
-		case "Pointer":
-			return stmt.Qual("unsafe", "Pointer")
-		case "byte":
-			return stmt.Byte()
-		case "rune":
-			return stmt.Rune()
-		}
-	case *types.Array:
-		return typeCode(stmt.Index(jen.Lit(t.Len())), t.Elem())
-	case *types.Slice:
-		return typeCode(stmt.Index(), t.Elem())
-	case *types.Struct:
-		return stmt.StructFunc(func(g *jen.Group) {
-			for i := 0; i < t.NumFields(); i++ {
-				f := t.Field(i)
-				g.Do(func(s *jen.Statement) {
-					if f.Anonymous() {
-						typeCode(s, f.Type())
-					} else {
-						typeCode(s.Id(f.Name()), f.Type())
-					}
-				})
-			}
-		})
-	case *types.Pointer:
-		return typeCode(stmt.Op("*"), t.Elem())
-	case *types.Tuple:
-		return stmt.ValuesFunc(func(g *jen.Group) {
-			typeTupleCode(g, t, false)
-		})
-	case *types.Signature:
-		return stmt.Func().ParamsFunc(func(g *jen.Group) {
-			typeTupleCode(g, t.Params(), t.Variadic())
-		}).ParamsFunc(func(g *jen.Group) {
-			typeTupleCode(g, t.Results(), false)
-		})
-	case *types.Interface:
-		return stmt.InterfaceFunc(func(g *jen.Group) {
-			for i := 0; i < t.NumEmbeddeds(); i++ {
-				e := t.EmbeddedType(i)
-				g.Do(func(s *jen.Statement) {
-					typeCode(s, e)
-				})
-			}
-			for i := 0; i < t.NumExplicitMethods(); i++ {
-				m := t.ExplicitMethod(i)
-				sig := m.Type().(*types.Signature)
-
-				g.Do(func(s *jen.Statement) {
-					s.Id(m.Name()).ParamsFunc(func(g *jen.Group) {
-						typeTupleCode(g, sig.Params(), sig.Variadic())
-					}).ParamsFunc(func(g *jen.Group) {
-						typeTupleCode(g, sig.Results(), false)
-					})
-				})
-			}
-		})
-	case *types.Map:
-		return typeCode(stmt.Map(typeCode(nil, t.Key())), t.Elem())
-	case *types.Chan:
-		switch t.Dir() {
-		case types.SendRecv:
-			return typeCode(stmt.Chan(), t.Elem())
-		case types.RecvOnly:
-			return typeCode(stmt.Op("<-").Chan(), t.Elem())
-		default:
-			return typeCode(stmt.Chan().Op("<-"), t.Elem())
-		}
-	case *types.Named:
-		if i := strings.LastIndex(t.String(), "."); i >= 0 {
-			return stmt.Qual(t.String()[:i], t.String()[i+1:])
-		}
-		return stmt.Id(t.String())
-	}
-	return stmt
-}
-
-func typeTupleCode(g *jen.Group, t *types.Tuple, variadic bool) {
-	for i := 0; i < t.Len(); i++ {
-		g.Do(func(s *jen.Statement) {
-			v := t.At(i)
-			if variadic && i+1 == t.Len() {
-				typeCode(s.Id("").Op("..."), v.Type().(*types.Slice).Elem())
-			} else {
-				typeCode(s.Id(""), v.Type())
-			}
-		})
-	}
+	return iface, err
 }
 
 func newFieldNameFormatter(prefix, suffix string) func(string) string {

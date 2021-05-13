@@ -22,7 +22,7 @@ func newParser(pkg *packages.Package) *parser {
 	}
 }
 
-func (p *parser) Parse() ([]*generator, error) {
+func (p *parser) parse() ([]*generator, error) {
 	destinationsAndGenerators := map[string]*generator{}
 	for _, syntax := range p.pkg.Syntax {
 		for _, decl := range syntax.Decls {
