@@ -15,7 +15,7 @@ Check out [my blog post](https://blog.kimmachinegun.dev/2020/08/go-interface-moc
   - [x] Capturing params and results of the method
   - [x] Capturing method calls
   - [x] Injecting method body
-  - [x] Customizing mock's field names with prefix and suffix
+  - [x] Customizing mock's field names with the prefix and the suffix
     - default: `prefix:"_"`, `suffix:""`
   - [x] Generating mock constructor
 
@@ -46,7 +46,7 @@ If you want to generate mock that implements the above interface, follow the ste
 
 #### 1. Write Mock Generator
 
-If you want to generate mock with mock generator, write a mock generator first. The mock will be generated in its generator path and it'll be named its generator's name. You can write multiple generators in one file, and multiple mocks will be generated. The mock generator should be consist of function calls of the `mockc` package.
+If you want to generate mock with mock generator, write a mock generator first. The mock will be generated in its generator path, and it'll be named its generator's name. You can write multiple generators in one file, and multiple mocks will be generated. The mock generator should be consisted of function calls of the `mockc` package.
 
 ```go
 //+build mockc
