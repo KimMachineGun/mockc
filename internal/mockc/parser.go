@@ -218,17 +218,22 @@ func (p *parser) findMockcCalls(stmts []ast.Stmt) ([]*ast.CallExpr, error) {
 		case *ast.ExprStmt:
 			call, ok := stmt.X.(*ast.CallExpr)
 			if !ok {
+				invalid = true
 				continue
 			}
 
 			sel, ok := call.Fun.(*ast.SelectorExpr)
 			if !ok {
+				invalid = true
 				continue
 			}
 
-			if p.pkg.TypesInfo.ObjectOf(sel.Sel).Pkg().Path() == mockcPath {
-				calls = append(calls, call)
+			if p.pkg.TypesInfo.ObjectOf(sel.Sel).Pkg().Path() != mockcPath {
+				invalid = true
+				continue
 			}
+
+			calls = append(calls, call)
 		case *ast.EmptyStmt, *ast.ReturnStmt:
 		default:
 			invalid = true
