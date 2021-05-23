@@ -87,7 +87,7 @@ func (g *generator) addMockWithFlags(ctx context.Context, wd string, name string
 	}
 
 	patterns := make([]string, 0, len(targetInterfaces))
-	for pkgPath, _ := range targetInterfaces {
+	for pkgPath := range targetInterfaces {
 		patterns = append(patterns, pkgPath)
 	}
 
