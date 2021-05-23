@@ -1,0 +1,3 @@
+{
+  "output": "^generated: /(.+?)/testdata/basic/mockc_gen\\.go\n$"
+}

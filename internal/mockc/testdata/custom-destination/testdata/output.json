@@ -1,0 +1,3 @@
+{
+  "output": "^generated: /(.+?)/testdata/custom-destination/custom_destination\\.go\n$"
+}
