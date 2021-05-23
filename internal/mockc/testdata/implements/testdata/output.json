@@ -1,0 +1,3 @@
+{
+  "output": "^mockc\\.Implements is deprecated\\. Please use mock\\.Implement instead\\.\\ngenerated: /(.+?)/testdata/implements/mockc_gen\\.go\n$"
+}

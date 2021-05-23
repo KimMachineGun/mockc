@@ -220,6 +220,10 @@ func render(pkg *packages.Package, mocks []mockInfo, gogenerate string) ([]byte,
 }
 
 func typeCode(stmt *jen.Statement, t types.Type) jen.Code {
+	if stmt == nil {
+		stmt = &jen.Statement{}
+	}
+
 	switch t := t.(type) {
 	case *types.Basic:
 		switch t.Name() {
@@ -265,7 +269,7 @@ func typeCode(stmt *jen.Statement, t types.Type) jen.Code {
 			return stmt.Rune()
 		}
 	case *types.Array:
-		return typeCode(stmt.Index(jen.Lit(t.Len())), t.Elem())
+		return typeCode(stmt.Index(jen.Lit(int(t.Len()))), t.Elem())
 	case *types.Slice:
 		return typeCode(stmt.Index(), t.Elem())
 	case *types.Struct:

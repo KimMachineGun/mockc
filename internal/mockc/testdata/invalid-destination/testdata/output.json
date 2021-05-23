@@ -1,0 +1,3 @@
+{
+  "err": "cannot set destination:\n\tmock \"MockcCache\": \"mockc_gen.txt\" is not a go file"
+}

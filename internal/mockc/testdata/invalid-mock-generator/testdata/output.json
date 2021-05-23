@@ -1,0 +1,3 @@
+{
+  "err": "cannot find mockc calls:\n\tmock \"InvalidMockGenerator\": mock generator should be consist of mockc function calls"
+}
